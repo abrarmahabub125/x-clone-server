@@ -1,11 +1,14 @@
 import express from "express";
-import register from "../controllers/auth/register.js";
-import verifyOTP from "../controllers/auth/verify-otp.js";
-import login from "../controllers/auth/login.js";
-import getMe from "../controllers/auth/getMe.js";
 import resetPassword from "../controllers/auth/reset-password.js";
 import { verifyTempCookie } from "../middleware/verifyTempCookie.js";
 import { verifyAccessToken } from "../middleware/verifyAccessToken.js";
+
+import {
+  register,
+  verifyOTP,
+  login,
+  getMe,
+} from "../controllers/auth/auth.controllers.js";
 
 const router = express.Router();
 
