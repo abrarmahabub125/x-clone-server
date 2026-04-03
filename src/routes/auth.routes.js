@@ -21,7 +21,7 @@ router.post("/auth/login", login);
 router.post("/auth/register", register);
 router.post("/auth/verify-otp", verifyTempCookie, verifyOTP);
 router.get("/auth/get-me", verifyAccessToken, getMe);
-router.get("/auth/logout", logout);
+router.post("/auth/logout", logout);
 
 //export router
 export { router };

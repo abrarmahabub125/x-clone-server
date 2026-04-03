@@ -1,7 +1,7 @@
 import registerSchema from "../../validations/registerSchema.js";
 import loginSchema from "../../validations/loginSchema.js";
 
-import { getDB } from "../../config/db.js";
+import { getDB, client } from "../../config/db.js";
 import { generateOTP } from "../../utils/generateOTP.js";
 import sendOTP from "../../utils/otpMailer.js";
 import {
@@ -13,11 +13,22 @@ import {
   generateTempToken,
 } from "../../utils/jwtSignAndCompare.js";
 
+/**
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ */
+
 // Registration route that handles user registration
 export async function register(req, res, next) {
   try {
     const result = await registerSchema.safeParseAsync(req.body);
     const db = getDB();
+    const session = client.startSession();
 
     // Check if user data is valid
     if (!result.success) {
@@ -58,6 +69,8 @@ export async function register(req, res, next) {
       throw err;
     }
 
+    // ==========================================================================================
+
     // User object
     const user = {
       fullName,
@@ -70,10 +83,44 @@ export async function register(req, res, next) {
       updatedAt: new Date(),
     };
 
-    const usersCollection = db.collection("users");
-    const dbResponse = await usersCollection.insertOne(user);
+    // const usersCollection = db.collection("users");
+    // const dbResponse = await usersCollection.insertOne(user);
 
-    if (!dbResponse.insertedId) {
+    let insertedUserId;
+    let insertedProfileId;
+
+    try {
+      await session.withTransaction(async () => {
+        // create user on users collection
+        const userResult = await db
+          .collection("users")
+          .insertOne(user, { session });
+        insertedUserId = userResult.insertedId;
+
+        const userProfile = {
+          userId: insertedUserId,
+          bio: "",
+          username: "",
+          profilePic: "",
+          location: "",
+          totalPost: 0,
+          joinedAt: new Date(),
+          followers: [],
+          following: [],
+        };
+
+        const profileResult = await db
+          .collection("profiles")
+          .insertOne(userProfile, { session });
+        insertedProfileId = profileResult.insertedId;
+      });
+    } catch (err) {
+      next(err);
+    } finally {
+      await session.endSession();
+    }
+
+    if (!insertedUserId || !insertedProfileId) {
       const err = new Error("Registration failed");
       err.statusCode = 500;
       throw err;
@@ -81,7 +128,7 @@ export async function register(req, res, next) {
 
     // Temporary token for OTP validation
     const temporaryJWTToken = generateTempToken({
-      id: dbResponse.insertedId.toString(),
+      id: insertedUserId.toString(),
       email,
     });
 
@@ -258,7 +305,7 @@ export async function login(req, res, next) {
   }
 }
 
-export function logout(req, res, next) {
+export function logout(res) {
   res.clearCookie("token", {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",

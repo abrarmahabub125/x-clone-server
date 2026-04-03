@@ -3,7 +3,8 @@ import cors from "cors";
 import helmet from "helmet";
 import cookieParser from "cookie-parser";
 import morgan from "morgan";
-import { router } from "./src/routes/auth.routes.js";
+import { router as authRouter } from "./src/routes/auth.routes.js";
+import { router as profileRouter } from "./src/routes/profile.routes.js";
 import errorHandler from "./src/middleware/errorHandler.js";
 
 const app = express();
@@ -27,7 +28,8 @@ app.get("/", (req, res) => {
 });
 
 //APIs
-app.use("/api", router);
+app.use("/api", authRouter);
+app.use("/api", profileRouter);
 
 // Centralize error handler
 app.use(errorHandler);
