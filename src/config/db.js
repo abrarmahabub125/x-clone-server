@@ -1,9 +1,10 @@
 import { MongoClient, ServerApiVersion } from "mongodb";
 
 let db;
+let client;
 
 const connectDB = async () => {
-  const client = new MongoClient(process.env.MONGODB_URI, {
+  client = new MongoClient(process.env.MONGODB_URI, {
     serverApi: {
       version: ServerApiVersion.v1,
       strict: true,
@@ -24,4 +25,4 @@ const getDB = () => {
   return db;
 };
 
-export { connectDB, getDB };
+export { connectDB, getDB, client };

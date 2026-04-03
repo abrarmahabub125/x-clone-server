@@ -15,57 +15,57 @@ const sendOTP = async (email, otp) => {
       to: email,
       subject: "You OTP Code",
       html: `
-      <div style="margin:0; padding:0; font-family: Arial, sans-serif; background-color:#f5f7fa;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f5f7fa; padding: 30px 0;">
-    <tr>
-      <td align="center">
-        <table width="400" cellpadding="0" cellspacing="0" style="background-color:#ffffff; border-radius:12px; padding:30px; box-shadow:0 4px 20px rgba(0,0,0,0.1);">
-          
-          <!-- Header -->
-          <tr>
-            <td align="center" style="padding-bottom:20px;">
-              <h2 style="margin:0; color:#1a73e8;">Verify Your Account</h2>
-            </td>
-          </tr>
+  <div style="margin:0;padding:20px 0;background-color:#eef2ff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
 
-          <!-- Body -->
-          <tr>
-            <td style="color:#555555; font-size:16px; line-height:1.6; padding-bottom:25px;">
-              Hi,<br><br>
-              Use the following OTP to verify your email address. This OTP is valid for <strong style="color:#1a73e8;">10 minutes</strong>.
-            </td>
-          </tr>
+    <div style="max-width:500px;margin:40px auto;background:#ffffff;border-radius:12px;padding:32px;">
 
-          <!-- OTP Box -->
-          <tr>
-            <td align="center" style="padding-bottom:25px;">
-              <div style="display:inline-block; background-color:#e8f0fe; border-radius:8px; padding:15px 30px; font-size:28px; letter-spacing:6px; font-weight:bold; color:#1a73e8; font-family: 'Courier New', monospace;">
-                ${otp}
-              </div>
-            </td>
-          </tr>
+      <!-- Logo -->
+      <div style="text-align:center;font-size:26px;font-weight:700;color:#4f46e5;margin-bottom:20px;">
+        X.com
+      </div>
 
-          <!-- Footer / Note -->
-          <tr>
-            <td style="color:#999999; font-size:14px; line-height:1.5; text-align:center; padding-bottom:10px;">
-              If you did not request this code, please ignore this email.<br>
-              This is an automated message, please do not reply.
-            </td>
-          </tr>
+      <!-- Title -->
+      <div style="font-size:22px;font-weight:600;color:#111827;margin-bottom:10px;text-align:center;">
+        Verify Your Email
+      </div>
 
-          <!-- Closing -->
-          <tr>
-            <td style="padding-top:10px; text-align:center; color:#555555; font-size:16px;">
-              Thank you,<br>
-              <strong>Your Company Name</strong>
-            </td>
-          </tr>
+      <!-- Text -->
+      <div style="font-size:14px;color:#4b5563;margin-bottom:20px;line-height:1.6;text-align:center;">
+        Enter the OTP below to complete your verification. This code is valid for a short time.
+      </div>
 
-        </table>
-      </td>
-    </tr>
-  </table>
-</div>
+      <!-- OTP BOX -->
+      <div style="text-align:center;font-size:32px;letter-spacing:8px;font-weight:700;color:#4f46e5;background:#f8f8ff;padding:18px 0;border-radius:10px;margin:25px 0;">
+        ${otp}
+      </div>
+
+      <!-- Expiry -->
+      <div style="font-size:13px;color:#6b7280;text-align:center;margin-bottom:15px;">
+        ⏳ This OTP will expire in <strong>10 minutes</strong>
+      </div>
+
+      <!-- Warning -->
+      <div style="font-size:13px;color:#dc2626;background:#fef2f2;padding:10px;border-radius:6px;text-align:center;margin-bottom:20px;">
+        ⚠️ Never share your OTP with anyone. We will never ask for it.
+      </div>
+
+      <!-- Divider -->
+      <div style="height:1px;background:#e5e7eb;margin:20px 0;"></div>
+
+      <!-- Footer text -->
+      <div style="font-size:14px;color:#4b5563;text-align:center;margin-bottom:10px;">
+        Didn’t request this? You can safely ignore this email.
+      </div>
+
+      <!-- Footer -->
+      <div style="font-size:12px;color:#9ca3af;text-align:center;">
+        © 2026 <strong style="color:#4f46e5;">x.com</strong>. All rights reserved.
+      </div>
+
+    </div>
+
+  </div>
+
       `,
     };
     const info = await transporter.sendMail(mailOptions);

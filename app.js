@@ -4,6 +4,7 @@ import helmet from "helmet";
 import cookieParser from "cookie-parser";
 import morgan from "morgan";
 import { router } from "./src/routes/auth.routes.js";
+import errorHandler from "./src/middleware/errorHandler.js";
 
 const app = express();
 
@@ -27,5 +28,19 @@ app.get("/", (req, res) => {
 
 //APIs
 app.use("/api", router);
+
+// Centralize error handler
+app.use(errorHandler);
+
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    error: {
+      code: "NOT_FOUND",
+      message: "Route not found",
+    },
+  });
+});
 
 export default app;

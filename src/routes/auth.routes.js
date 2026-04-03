@@ -1,5 +1,4 @@
 import express from "express";
-import resetPassword from "../controllers/auth/reset-password.js";
 import { verifyTempCookie } from "../middleware/verifyTempCookie.js";
 import { verifyAccessToken } from "../middleware/verifyAccessToken.js";
 
@@ -8,6 +7,7 @@ import {
   verifyOTP,
   login,
   getMe,
+  logout,
 } from "../controllers/auth/auth.controllers.js";
 
 const router = express.Router();
@@ -20,8 +20,8 @@ const router = express.Router();
 router.post("/auth/login", login);
 router.post("/auth/register", register);
 router.post("/auth/verify-otp", verifyTempCookie, verifyOTP);
-router.post("/auth/reset-password", resetPassword);
 router.get("/auth/get-me", verifyAccessToken, getMe);
+router.get("/auth/logout", logout);
 
 //export router
 export { router };
