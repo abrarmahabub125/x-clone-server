@@ -5,6 +5,8 @@ import cookieParser from "cookie-parser";
 import morgan from "morgan";
 import { router as authRouter } from "./src/routes/auth.routes.js";
 import { router as profileRouter } from "./src/routes/profile.routes.js";
+import { router as followRouter } from "./src/routes/follow.routes.js";
+
 import errorHandler from "./src/middleware/errorHandler.js";
 
 const app = express();
@@ -29,6 +31,7 @@ app.get("/", (req, res) => {
 
 //APIs
 app.use("/api", authRouter);
+app.use("/api", followRouter);
 app.use("/api", profileRouter);
 
 // Centralize error handler

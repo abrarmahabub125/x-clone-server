@@ -8,7 +8,7 @@ import {
   login,
   getMe,
   logout,
-} from "../controllers/auth/auth.controllers.js";
+} from "../controllers/auth.controllers.js";
 
 const router = express.Router();
 

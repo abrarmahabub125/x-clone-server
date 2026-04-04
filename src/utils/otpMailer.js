@@ -73,6 +73,7 @@ const sendOTP = async (email, otp) => {
     return info;
   } catch (err) {
     console.log("Mail error", err);
+    return false;
   }
 };
 

@@ -1,17 +1,18 @@
-import registerSchema from "../../validations/registerSchema.js";
-import loginSchema from "../../validations/loginSchema.js";
+import registerSchema from "../validations/registerSchema.js";
+import loginSchema from "../validations/loginSchema.js";
 
-import { getDB, client } from "../../config/db.js";
-import { generateOTP } from "../../utils/generateOTP.js";
-import sendOTP from "../../utils/otpMailer.js";
+import { getDB, client } from "../config/db.js";
+import { generateOTP } from "../utils/generateOTP.js";
+import sendOTP from "../utils/otpMailer.js";
 import {
   compareWithBcryptHash,
   generateBcryptHash,
-} from "../../utils/bcryptHashAndCompare.js";
+} from "../utils/bcryptHashAndCompare.js";
 import {
   generateAccessToken,
   generateTempToken,
-} from "../../utils/jwtSignAndCompare.js";
+} from "../utils/jwtSignAndCompare.js";
+import { ObjectId } from "mongodb";
 
 /**
  *
@@ -83,9 +84,6 @@ export async function register(req, res, next) {
       updatedAt: new Date(),
     };
 
-    // const usersCollection = db.collection("users");
-    // const dbResponse = await usersCollection.insertOne(user);
-
     let insertedUserId;
     let insertedProfileId;
 
@@ -100,6 +98,7 @@ export async function register(req, res, next) {
         const userProfile = {
           userId: insertedUserId,
           bio: "",
+          fullName,
           username: "",
           profilePic: "",
           location: "",
@@ -195,7 +194,10 @@ export async function verifyOTP(req, res, next) {
       throw err;
     }
 
-    const isMatch = compareWithBcryptHash(OTP, existingUser.verificationOTP);
+    const isMatch = await compareWithBcryptHash(
+      OTP,
+      existingUser.verificationOTP,
+    );
 
     if (isMatch) {
       const updateResponse = await collection.updateOne(
@@ -257,8 +259,6 @@ export async function login(req, res, next) {
     const userCollection = db.collection("users");
     const user = await userCollection.findOne({ email });
 
-    console.log(user);
-
     // Check if user exists
     if (!user) {
       const err = new Error("Invalid credentials.");
@@ -274,7 +274,10 @@ export async function login(req, res, next) {
     }
 
     // Compare password
-    const isPasswordMatch = compareWithBcryptHash(password, user.password);
+    const isPasswordMatch = await compareWithBcryptHash(
+      password,
+      user.password,
+    );
 
     if (!isPasswordMatch) {
       const err = new Error("Invalid credentials");
@@ -305,7 +308,7 @@ export async function login(req, res, next) {
   }
 }
 
-export function logout(res) {
+export function logout(req, res) {
   res.clearCookie("token", {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
@@ -322,14 +325,29 @@ export function logout(res) {
 export async function getMe(req, res, next) {
   try {
     const user = req.user;
+    const db = getDB();
 
     if (!user) {
       return res.status(401).json({
-        success: true,
+        success: false,
         isAuthenticated: false,
         user: null,
       });
     }
+
+    const profileData = await db
+      .collection("profiles")
+      .findOne({ userId: new ObjectId(user.id) });
+
+    if (!profileData) {
+      return res.status(404).json({
+        success: false,
+        isAuthenticated: false,
+        user: null,
+      });
+    }
+
+    const { username, profilePic, location, bio, fullName } = profileData;
 
     return res.status(200).json({
       success: true,
@@ -337,6 +355,11 @@ export async function getMe(req, res, next) {
       user: {
         id: user.id,
         email: user.email,
+        fullName,
+        username,
+        bio,
+        profilePic,
+        location,
       },
     });
   } catch (error) {

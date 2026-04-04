@@ -13,7 +13,7 @@ connectDB()
   })
   .catch((err) => {
     console.log(
-      "Server isn't started on port 3000, because database connection failed!",
+      "Server isn't started because database connection failed!",
       err,
     );
   });
