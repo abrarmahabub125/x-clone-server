@@ -6,6 +6,7 @@ import morgan from "morgan";
 import { router as authRouter } from "./src/routes/auth.routes.js";
 import { router as profileRouter } from "./src/routes/profile.routes.js";
 import { router as followRouter } from "./src/routes/follow.routes.js";
+import { router as bookmarkRouter } from "./src/routes/bookmark.routes.js";
 
 import errorHandler from "./src/middleware/errorHandler.js";
 
@@ -33,6 +34,7 @@ app.get("/", (req, res) => {
 app.use("/api", authRouter);
 app.use("/api", followRouter);
 app.use("/api", profileRouter);
+app.use("/api", bookmarkRouter);
 
 // Centralize error handler
 app.use(errorHandler);

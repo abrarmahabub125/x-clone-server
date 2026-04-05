@@ -12,10 +12,13 @@ import {
 
 const router = express.Router();
 
-// /api/auth/register
-// /api/auth/verify-otp
-// /api/auth/login
-// /api/auth/reset-password
+/**
+ * ------ http://localhost:3000/api/auth/register
+ * ------ http://localhost:3000/api/auth/verify-otp
+ * ------ http://localhost:3000/api/auth/login
+ * ------ http://localhost:3000/api/auth/logout
+ * ------ http://localhost:3000/api/auth/get-me
+ */
 
 router.post("/auth/login", login);
 router.post("/auth/register", register);
