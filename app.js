@@ -3,13 +3,14 @@ import cors from "cors";
 import helmet from "helmet";
 import cookieParser from "cookie-parser";
 import morgan from "morgan";
-import { router as authRouter } from "./src/routes/auth.routes.js";
-import { router as profileRouter } from "./src/routes/profile.routes.js";
-import { router as followRouter } from "./src/routes/follow.routes.js";
-import { router as bookmarkRouter } from "./src/routes/bookmark.routes.js";
-import { router as tweetRouter } from "./src/routes/tweet.routes.js";
+import { router as authRouter } from "./src/routes/authRoutes.js";
+import { router as profileRouter } from "./src/routes/userRoutes.js";
+import { router as followRouter } from "./src/routes/followRoutes.js";
+import { router as bookmarkRouter } from "./src/routes/bookmarkRoutes.js";
+import { router as tweetRouter } from "./src/routes/tweetRoutes.js";
 
 import errorHandler from "./src/middleware/errorHandler.js";
+import { sendError, sendSuccess } from "./src/utils/apiResponse.js";
 
 const app = express();
 
@@ -28,7 +29,12 @@ app.use(express.urlencoded({ extended: true }));
 
 // API endpoints
 app.get("/", (req, res) => {
-  res.json({ message: "Server is running..." });
+  return sendSuccess(res, {
+    message: "Server is running.",
+    data: {
+      service: "x-server",
+    },
+  });
 });
 
 //APIs
@@ -43,12 +49,10 @@ app.use(errorHandler);
 
 // 404 handler
 app.use((req, res) => {
-  res.status(404).json({
-    success: false,
-    error: {
-      code: "NOT_FOUND",
-      message: "Route not found",
-    },
+  return sendError(res, {
+    statusCode: 404,
+    code: "ROUTE_NOT_FOUND",
+    message: `Route ${req.method} ${req.originalUrl} was not found.`,
   });
 });
 

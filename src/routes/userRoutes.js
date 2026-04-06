@@ -2,23 +2,16 @@ import express from "express";
 
 import {
   getProfile,
+  getUserLikes,
+  getUserMedia,
   getUserPosts,
   getUserReplies,
-  getUserMedia,
-  getUserLikes,
-} from "../controllers/profile.controllers.js";
+} from "../controllers/userControllers.js";
 import { verifyAccessToken } from "../middleware/verifyAccessToken.js";
 
 const router = express.Router();
 
-/**
- * ------ http://localhost:3000/api/users/:id
- * ------ http://localhost:3000/api/users/:id/posts
- * ------ http://localhost:3000/api/users/:id/replies
- * ------ http://localhost:3000/api/users/:id/likes
- */
-
-// Get users profile info
+// Profile routes expose the header and tabbed timeline data.
 router.get("/users/:id", verifyAccessToken, getProfile);
 router.get("/users/:id/posts", getUserPosts);
 router.get("/users/:id/replies", verifyAccessToken, getUserReplies);
