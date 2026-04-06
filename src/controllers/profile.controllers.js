@@ -49,3 +49,75 @@ export async function getProfile(req, res, next) {
     next(error);
   }
 }
+
+export async function getUserPosts(req, res, next) {
+  const { id } = req.params;
+
+  if (!ObjectId.isValid(id)) {
+    return res.status(401).json({
+      status: false,
+      message: "User id is invalid!",
+    });
+  }
+
+  try {
+    const db = getDB();
+
+    const posts = await db
+      .collection("tweets")
+      .aggregate([
+        {
+          $match: {
+            userId: new ObjectId(id),
+          },
+        },
+        {
+          $lookup: {
+            from: "profiles",
+            localField: "userId",
+            foreignField: "userId",
+            as: "user",
+          },
+        },
+        {
+          $unwind: "$user",
+        },
+        {
+          $project: {
+            _id: 1,
+            userId: 1,
+            content: 1,
+            media: 1,
+            likesCount: 1,
+            commentsCount: 1,
+            viewsCount: 1,
+            retweetsCount: 1,
+            createdAt: 1,
+            "user.fullName": 1,
+            "user.username": 1,
+            "user.profilePic": 1,
+          },
+        },
+        {
+          $sort: { createdAt: -1 },
+        },
+      ])
+      .toArray();
+
+    res.status(200).json({
+      status: true,
+      posts: posts,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+export async function getUserReplies(req, res, next) {
+  res.send("user posts");
+}
+export async function getUserMedia(req, res, next) {
+  res.send("user posts");
+}
+export async function getUserLikes(req, res, next) {
+  res.send("user posts");
+}
