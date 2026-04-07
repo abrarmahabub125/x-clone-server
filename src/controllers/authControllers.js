@@ -105,7 +105,8 @@ export async function register(req, res, next) {
       throw createAppError({
         statusCode: 500,
         code: "OTP_DELIVERY_FAILED",
-        message: "We could not send the verification OTP right now. Please try again.",
+        message:
+          "We could not send the verification OTP right now. Please try again.",
       });
     }
 
@@ -202,7 +203,8 @@ export async function verifyOTP(req, res, next) {
       throw createAppError({
         statusCode: 404,
         code: "USER_NOT_FOUND",
-        message: "No user account was found for the provided verification token.",
+        message:
+          "No user account was found for the provided verification token.",
       });
     }
 

@@ -8,6 +8,7 @@ import { router as profileRouter } from "./src/routes/userRoutes.js";
 import { router as followRouter } from "./src/routes/followRoutes.js";
 import { router as bookmarkRouter } from "./src/routes/bookmarkRoutes.js";
 import { router as tweetRouter } from "./src/routes/tweetRoutes.js";
+import { router as feedRouter } from "./src/routes/feedRoutes.js";
 
 import errorHandler from "./src/middleware/errorHandler.js";
 import { sendError, sendSuccess } from "./src/utils/apiResponse.js";
@@ -43,6 +44,7 @@ app.use("/api", followRouter);
 app.use("/api", profileRouter);
 app.use("/api", bookmarkRouter);
 app.use("/api", tweetRouter);
+app.use("/api", feedRouter);
 
 // Centralize error handler
 app.use(errorHandler);
