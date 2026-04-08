@@ -6,8 +6,45 @@ import { sendError, sendSuccess } from "../utils/apiResponse.js";
 const USERS_COLLECTION = "users";
 const PROFILES_COLLECTION = "profiles";
 const TWEETS_COLLECTION = "tweets";
+const BOOKMARKS_COLLECTION = "bookmarks";
 
-function buildUserPostsPipeline(userObjectId) {
+function buildBookmarkLookupStages(loggedInUserObjectId) {
+  return [
+    {
+      $lookup: {
+        from: BOOKMARKS_COLLECTION,
+        let: {
+          tweetId: "$_id",
+        },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $eq: ["$tweetId", "$$tweetId"] },
+                  { $eq: ["$userId", loggedInUserObjectId] },
+                ],
+              },
+            },
+          },
+          {
+            $limit: 1,
+          },
+        ],
+        as: "bookmarkMatch",
+      },
+    },
+    {
+      $addFields: {
+        isBookmarked: {
+          $gt: [{ $size: "$bookmarkMatch" }, 0],
+        },
+      },
+    },
+  ];
+}
+
+function buildUserPostsPipeline(userObjectId, loggedInUserObjectId) {
   return [
     {
       $match: {
@@ -26,6 +63,7 @@ function buildUserPostsPipeline(userObjectId) {
     {
       $unwind: "$user",
     },
+    ...buildBookmarkLookupStages(loggedInUserObjectId),
     {
       $project: {
         _id: 1,
@@ -37,6 +75,7 @@ function buildUserPostsPipeline(userObjectId) {
         viewsCount: 1,
         retweetsCount: 1,
         createdAt: 1,
+        isBookmarked: 1,
         "user.fullName": 1,
         "user.username": 1,
         "user.profilePic": 1,
@@ -114,7 +153,12 @@ export async function getUserPosts(req, res, next) {
     const db = getDB();
     const posts = await db
       .collection(TWEETS_COLLECTION)
-      .aggregate(buildUserPostsPipeline(new ObjectId(id)))
+      .aggregate(
+        buildUserPostsPipeline(
+          new ObjectId(id),
+          new ObjectId(req.user.id),
+        ),
+      )
       .toArray();
 
     return sendSuccess(res, {

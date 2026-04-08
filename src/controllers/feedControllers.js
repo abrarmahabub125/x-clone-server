@@ -1,7 +1,45 @@
 import { ObjectId } from "mongodb";
 import { getDB } from "../config/db.js";
 
-function buildUserPostsPipelineForFeed(userObjectId) {
+const BOOKMARKS_COLLECTION = "bookmarks";
+
+function buildBookmarkLookupStages(loggedInUserObjectId) {
+  return [
+    {
+      $lookup: {
+        from: BOOKMARKS_COLLECTION,
+        let: {
+          tweetId: "$_id",
+        },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $eq: ["$tweetId", "$$tweetId"] },
+                  { $eq: ["$userId", loggedInUserObjectId] },
+                ],
+              },
+            },
+          },
+          {
+            $limit: 1,
+          },
+        ],
+        as: "bookmarkMatch",
+      },
+    },
+    {
+      $addFields: {
+        isBookmarked: {
+          $gt: [{ $size: "$bookmarkMatch" }, 0],
+        },
+      },
+    },
+  ];
+}
+
+function buildFeedPostsPipeline(userObjectId, loggedInUserObjectId) {
   return [
     {
       $match: {
@@ -20,6 +58,7 @@ function buildUserPostsPipelineForFeed(userObjectId) {
     {
       $unwind: "$user",
     },
+    ...buildBookmarkLookupStages(loggedInUserObjectId),
     {
       $project: {
         _id: 1,
@@ -31,6 +70,7 @@ function buildUserPostsPipelineForFeed(userObjectId) {
         viewsCount: 1,
         retweetsCount: 1,
         createdAt: 1,
+        isBookmarked: 1,
         "user.fullName": 1,
         "user.username": 1,
         "user.profilePic": 1,
@@ -49,7 +89,13 @@ export async function forYouFeed(req, res, next) {
   try {
     const feedPosts = await db
       .collection("tweets")
-      .aggregate(buildUserPostsPipelineForFeed(new ObjectId(loggedInUserId)))
+      .aggregate(
+        buildFeedPostsPipeline(
+          new ObjectId(loggedInUserId),
+          new ObjectId(loggedInUserId),
+        ),
+      )
+      .sort({ createdAt: -1 })
       .toArray();
 
     res.status(200).json({
@@ -61,5 +107,26 @@ export async function forYouFeed(req, res, next) {
   }
 }
 export async function followingFeed(req, res, next) {
-  res.send("following feed");
+  const db = getDB();
+  const loggedInUserId = req.user.id;
+
+  try {
+    const followingPost = await db
+      .collection("tweets")
+      .aggregate(
+        buildFeedPostsPipeline(
+          new ObjectId(loggedInUserId),
+          new ObjectId(loggedInUserId),
+        ),
+      )
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    res.status(200).json({
+      message: "Feed posts retrieved successfully.",
+      data: followingPost,
+    });
+  } catch (err) {
+    next(err);
+  }
 }
