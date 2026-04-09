@@ -133,6 +133,10 @@ export async function createTweet(req, res, next) {
       });
     }
 
+    await db
+      .collection("profiles")
+      .updateOne({ userId: new ObjectId(userId) }, { $inc: { totalPost: 1 } });
+
     return sendSuccess(res, {
       statusCode: 201,
       message: "Tweet created successfully.",
