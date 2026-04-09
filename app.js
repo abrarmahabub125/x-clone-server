@@ -38,6 +38,46 @@ app.get("/", (req, res) => {
   });
 });
 
+/**
+ * --------------------- Auth ----------------------
+ *  GET ---- /api/auth/register
+ *  GET ---- /api/auth/login
+ *  GET ---- /api/auth/verify-otp
+ *  GET ---- /api/auth/get-me
+ *  GET ---- /api/auth/logout
+ *
+ * --------------------Follow ----------------------
+ *  GET ---- /api/users/who-to-follow
+ *  GET ---- /api/users/connect
+ *  GET ---- /api/users/creators
+ *
+ * -------------------- Profile --------------------
+ *  GET ---- /api//users/:id
+ *  GET ---- /api//users/:id/posts
+ *  GET ---- /api//users/:id/replies
+ *  GET ---- /api//users/:id/medias
+ *  GET ---- /api//users/:id/likes
+ *
+ *  PATCH -- /api/users/update-profile
+ *
+ *  ------------------ Bookmark --------------------
+ *  GET ---- /api/bookmarks
+ *  POST --- /api/bookmarks
+ *  DELETE - /api/bookmarks/:tweetId
+ *
+ *  ------------------ Tweet -----------------------
+ *  GET ---- /api/tweets
+ *  GET ---- /api/tweets/:id
+ *  GET ---- /api/users/:userId/tweets
+ *
+ *  POST --- /api/tweets
+ *
+ *  ------------------ Feed ------------------------
+ *  GET ---- /api/feed/for-you
+ *  GET ---- /api/feed/following
+ *
+ */
+
 //APIs
 app.use("/api", authRouter);
 app.use("/api", followRouter);
