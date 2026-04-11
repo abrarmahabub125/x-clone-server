@@ -19,7 +19,7 @@ const app = express();
 // Global Middlewares
 app.use(
   cors({
-    origin: "http://localhost:5173",
+    origin: "https://x-com-clone-api-server.onrender.com/",
     credentials: true,
   }),
 );
