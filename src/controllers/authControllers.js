@@ -42,7 +42,7 @@ function getTempCookieClearOptions() {
 function getAccessCookieOptions() {
   return {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: true,
     sameSite: "none",
     maxAge: ACCESS_TOKEN_MAX_AGE,
   };
