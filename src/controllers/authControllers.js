@@ -43,7 +43,7 @@ function getAccessCookieOptions() {
   return {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
+    sameSite: "none",
     maxAge: ACCESS_TOKEN_MAX_AGE,
   };
 }
@@ -52,7 +52,7 @@ function getAccessCookieClearOptions() {
   return {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
+    sameSite: "none",
   };
 }
 
