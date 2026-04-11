@@ -19,7 +19,7 @@ const app = express();
 // Global Middlewares
 app.use(
   cors({
-    origin: "https://x-com-clone-api-server.onrender.com/",
+    origin: "https://xcomclone-five.vercel.app",
     credentials: true,
   }),
 );
