@@ -15,14 +15,56 @@ import errorHandler from "./src/middleware/errorHandler.js";
 import { sendError, sendSuccess } from "./src/utils/apiResponse.js";
 
 const app = express();
+const DEFAULT_ALLOWED_ORIGINS = [
+  "https://xcomclone-five.vercel.app",
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+];
+const LOCALHOST_ORIGIN_PATTERN =
+  /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(?::\d{1,5})?$/i;
+
+function parseAllowedOrigins(value) {
+  return (value ?? "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+}
+
+const allowedOrigins = new Set([
+  ...DEFAULT_ALLOWED_ORIGINS,
+  ...parseAllowedOrigins(process.env.CLIENT_URL),
+  ...parseAllowedOrigins(process.env.CLIENT_ORIGIN),
+  ...parseAllowedOrigins(process.env.CORS_ORIGINS),
+]);
+
+function isAllowedOrigin(origin) {
+  if (!origin) {
+    return true;
+  }
+
+  return allowedOrigins.has(origin) || LOCALHOST_ORIGIN_PATTERN.test(origin);
+}
+
+const corsOptions = {
+  origin(origin, callback) {
+    if (isAllowedOrigin(origin)) {
+      callback(null, true);
+      return;
+    }
+
+    callback(new Error(`Origin ${origin} is not allowed by CORS.`));
+  },
+  credentials: true,
+  methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  optionsSuccessStatus: 204,
+};
+
+app.set("trust proxy", 1);
 
 // Global Middlewares
-app.use(
-  cors({
-    origin: "https://xcomclone-five.vercel.app",
-    credentials: true,
-  }),
-);
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
 app.use(helmet());
 app.use(express.json());
 app.use(cookieParser());

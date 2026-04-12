@@ -22,38 +22,36 @@ const PROFILES_COLLECTION = "profiles";
 const TEMP_TOKEN_MAX_AGE = 10 * 60 * 1000;
 const ACCESS_TOKEN_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
 
-function getTempCookieOptions() {
+function isSecureRequest(req) {
+  return req.secure || req.get("x-forwarded-proto") === "https";
+}
+
+function buildCookieOptions(req, maxAge) {
+  const secure = isSecureRequest(req);
+
   return {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-    maxAge: TEMP_TOKEN_MAX_AGE,
+    secure,
+    sameSite: secure ? "none" : "lax",
+    path: "/",
+    ...(typeof maxAge === "number" ? { maxAge } : {}),
   };
 }
 
-function getTempCookieClearOptions() {
-  return {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-  };
+function getTempCookieOptions(req) {
+  return buildCookieOptions(req, TEMP_TOKEN_MAX_AGE);
 }
 
-function getAccessCookieOptions() {
-  return {
-    httpOnly: true,
-    secure: true,
-    sameSite: "none",
-    maxAge: ACCESS_TOKEN_MAX_AGE,
-  };
+function getTempCookieClearOptions(req) {
+  return buildCookieOptions(req);
 }
 
-function getAccessCookieClearOptions() {
-  return {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "none",
-  };
+function getAccessCookieOptions(req) {
+  return buildCookieOptions(req, ACCESS_TOKEN_MAX_AGE);
+}
+
+function getAccessCookieClearOptions(req) {
+  return buildCookieOptions(req);
 }
 
 function createUserProfile(userId, fullName) {
@@ -158,7 +156,7 @@ export async function register(req, res, next) {
       email,
     });
 
-    res.cookie("tempToken", temporaryJWTToken, getTempCookieOptions());
+    res.cookie("tempToken", temporaryJWTToken, getTempCookieOptions(req));
 
     return sendSuccess(res, {
       statusCode: 201,
@@ -265,8 +263,8 @@ export async function verifyOTP(req, res, next) {
       });
     }
 
-    res.clearCookie("tempToken", getTempCookieClearOptions());
-    res.clearCookie("token", getAccessCookieClearOptions());
+    res.clearCookie("tempToken", getTempCookieClearOptions(req));
+    res.clearCookie("token", getAccessCookieClearOptions(req));
 
     return sendSuccess(res, {
       message: "Account verified successfully.",
@@ -329,7 +327,7 @@ export async function login(req, res, next) {
       email: user.email,
     });
 
-    res.cookie("token", token, getAccessCookieOptions());
+    res.cookie("token", token, getAccessCookieOptions(req));
 
     return sendSuccess(res, {
       message: "Login successful.",
@@ -343,7 +341,7 @@ export async function login(req, res, next) {
 }
 
 export function logout(req, res) {
-  res.clearCookie("token", getAccessCookieClearOptions());
+  res.clearCookie("token", getAccessCookieClearOptions(req));
 
   return sendSuccess(res, {
     message: "Logout successful.",
