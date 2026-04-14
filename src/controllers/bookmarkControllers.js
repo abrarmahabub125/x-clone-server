@@ -2,6 +2,10 @@ import { ObjectId } from "mongodb";
 
 import { sendError, sendSuccess } from "../utils/apiResponse.js";
 import { getDB } from "../config/db.js";
+import {
+  buildTweetCardProjection,
+  buildViewerEngagementLookupStages,
+} from "../utils/tweetAggregation.js";
 
 const BOOKMARKS_COLLECTION = "bookmarks";
 
@@ -46,8 +50,9 @@ export async function getBookmarks(req, res, next) {
         {
           $unwind: "$user",
         },
+        ...buildViewerEngagementLookupStages(new ObjectId(userId), "$tweet._id"),
         {
-          $project: {
+          $project: buildTweetCardProjection({
             _id: "$tweet._id",
             userId: "$tweet.userId",
             content: "$tweet.content",
@@ -57,13 +62,10 @@ export async function getBookmarks(req, res, next) {
             viewsCount: "$tweet.viewsCount",
             retweetsCount: "$tweet.retweetsCount",
             createdAt: "$tweet.createdAt",
-            isBookmarked: {
-              $literal: true,
-            },
             "user.fullName": "$user.fullName",
             "user.username": "$user.username",
             "user.profilePic": "$user.profilePic",
-          },
+          }),
         },
       ])
       .toArray();

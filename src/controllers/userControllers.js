@@ -2,47 +2,15 @@ import { ObjectId } from "mongodb";
 
 import { getDB } from "../config/db.js";
 import { sendError, sendSuccess } from "../utils/apiResponse.js";
+import {
+  buildTweetCardProjection,
+  buildViewerEngagementLookupStages,
+  LIKES_COLLECTION,
+} from "../utils/tweetAggregation.js";
 
 const USERS_COLLECTION = "users";
 const PROFILES_COLLECTION = "profiles";
 const TWEETS_COLLECTION = "tweets";
-const BOOKMARKS_COLLECTION = "bookmarks";
-
-function buildBookmarkLookupStages(loggedInUserObjectId) {
-  return [
-    {
-      $lookup: {
-        from: BOOKMARKS_COLLECTION,
-        let: {
-          tweetId: "$_id",
-        },
-        pipeline: [
-          {
-            $match: {
-              $expr: {
-                $and: [
-                  { $eq: ["$tweetId", "$$tweetId"] },
-                  { $eq: ["$userId", loggedInUserObjectId] },
-                ],
-              },
-            },
-          },
-          {
-            $limit: 1,
-          },
-        ],
-        as: "bookmarkMatch",
-      },
-    },
-    {
-      $addFields: {
-        isBookmarked: {
-          $gt: [{ $size: "$bookmarkMatch" }, 0],
-        },
-      },
-    },
-  ];
-}
 
 function buildUserPostsPipeline(
   userObjectId,
@@ -56,7 +24,17 @@ function buildUserPostsPipeline(
       $match: {
         userId: userObjectId,
         ...(onlyMedia && {
-          "media.0": { $exists: true }, // media filter
+          $or: [
+            {
+              media: {
+                $type: "string",
+                $ne: "",
+              },
+            },
+            {
+              "media.0": { $exists: true },
+            },
+          ],
         }),
       },
     },
@@ -71,26 +49,66 @@ function buildUserPostsPipeline(
     {
       $unwind: "$user",
     },
-    ...buildBookmarkLookupStages(loggedInUserObjectId),
+    ...buildViewerEngagementLookupStages(loggedInUserObjectId),
     {
-      $project: {
-        _id: 1,
-        userId: 1,
-        content: 1,
-        media: 1,
-        likesCount: 1,
-        commentsCount: 1,
-        viewsCount: 1,
-        retweetsCount: 1,
-        createdAt: 1,
-        isBookmarked: 1,
-        "user.fullName": 1,
-        "user.username": 1,
-        "user.profilePic": 1,
-      },
+      $project: buildTweetCardProjection(),
     },
     {
       $sort: { createdAt: -1 },
+    },
+  ];
+}
+
+function buildUserLikesPipeline(userObjectId, loggedInUserObjectId) {
+  return [
+    {
+      $match: {
+        userId: userObjectId,
+      },
+    },
+    {
+      $sort: {
+        createdAt: -1,
+      },
+    },
+    {
+      $lookup: {
+        from: TWEETS_COLLECTION,
+        localField: "tweetId",
+        foreignField: "_id",
+        as: "tweet",
+      },
+    },
+    {
+      $unwind: "$tweet",
+    },
+    {
+      $lookup: {
+        from: PROFILES_COLLECTION,
+        localField: "tweet.userId",
+        foreignField: "userId",
+        as: "user",
+      },
+    },
+    {
+      $unwind: "$user",
+    },
+    ...buildViewerEngagementLookupStages(loggedInUserObjectId, "$tweet._id"),
+    {
+      $project: buildTweetCardProjection({
+        _id: "$tweet._id",
+        userId: "$tweet.userId",
+        content: "$tweet.content",
+        media: "$tweet.media",
+        likesCount: "$tweet.likesCount",
+        commentsCount: "$tweet.commentsCount",
+        viewsCount: "$tweet.viewsCount",
+        retweetsCount: "$tweet.retweetsCount",
+        createdAt: "$tweet.createdAt",
+        "user.fullName": "$user.fullName",
+        "user.username": "$user.username",
+        "user.profilePic": "$user.profilePic",
+      }),
     },
   ];
 }
@@ -201,7 +219,7 @@ export async function getUserMedia(req, res, next) {
     const posts = await db
       .collection(TWEETS_COLLECTION)
       .aggregate(
-        buildUserPostsPipeline(new ObjectId(id), new ObjectId(id), {
+        buildUserPostsPipeline(new ObjectId(id), new ObjectId(req.user.id), {
           onlyMedia: true,
         }),
       )
@@ -219,10 +237,34 @@ export async function getUserMedia(req, res, next) {
   }
 }
 
-export async function getUserLikes(req, res) {
-  return sendError(res, {
-    statusCode: 501,
-    code: "NOT_IMPLEMENTED",
-    message: "User likes retrieval is not implemented yet.",
-  });
+export async function getUserLikes(req, res, next) {
+  const { id } = req.params;
+
+  if (!ObjectId.isValid(id)) {
+    return sendError(res, {
+      statusCode: 400,
+      code: "INVALID_USER_ID",
+      message: "The provided user id is invalid.",
+    });
+  }
+
+  try {
+    const db = getDB();
+    const posts = await db
+      .collection(LIKES_COLLECTION)
+      .aggregate(
+        buildUserLikesPipeline(new ObjectId(id), new ObjectId(req.user.id)),
+      )
+      .toArray();
+
+    return sendSuccess(res, {
+      message: "User likes retrieved successfully.",
+      data: posts,
+      meta: {
+        count: posts.length,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
 }

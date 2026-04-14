@@ -1,5 +1,11 @@
+import { ObjectId } from "mongodb";
+
 import { getDB } from "../config/db.js";
 import { sendSuccess, sendError } from "../utils/apiResponse.js";
+import {
+  buildTweetCardProjection,
+  buildViewerEngagementLookupStages,
+} from "../utils/tweetAggregation.js";
 
 export async function findResults(req, res, next) {
   const db = getDB();
@@ -7,8 +13,6 @@ export async function findResults(req, res, next) {
     const { q } = req.query;
 
     const words = q.split(" ");
-
-    console.log(q, words);
 
     const userResult = await db
       .collection("profiles")
@@ -45,22 +49,9 @@ export async function findResults(req, res, next) {
         {
           $unwind: "$user",
         },
+        ...buildViewerEngagementLookupStages(new ObjectId(req.user.id)),
         {
-          $project: {
-            _id: 1,
-            userId: 1,
-            content: 1,
-            media: 1,
-            likesCount: 1,
-            commentsCount: 1,
-            viewsCount: 1,
-            retweetsCount: 1,
-            createdAt: 1,
-
-            "user.fullName": 1,
-            "user.username": 1,
-            "user.profilePic": 1,
-          },
+          $project: buildTweetCardProjection(),
         },
         {
           $sort: { createdAt: -1 },

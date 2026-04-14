@@ -1,43 +1,9 @@
 import { ObjectId } from "mongodb";
 import { getDB } from "../config/db.js";
-
-const BOOKMARKS_COLLECTION = "bookmarks";
-
-function buildBookmarkLookupStages(loggedInUserObjectId) {
-  return [
-    {
-      $lookup: {
-        from: BOOKMARKS_COLLECTION,
-        let: {
-          tweetId: "$_id",
-        },
-        pipeline: [
-          {
-            $match: {
-              $expr: {
-                $and: [
-                  { $eq: ["$tweetId", "$$tweetId"] },
-                  { $eq: ["$userId", loggedInUserObjectId] },
-                ],
-              },
-            },
-          },
-          {
-            $limit: 1,
-          },
-        ],
-        as: "bookmarkMatch",
-      },
-    },
-    {
-      $addFields: {
-        isBookmarked: {
-          $gt: [{ $size: "$bookmarkMatch" }, 0],
-        },
-      },
-    },
-  ];
-}
+import {
+  buildTweetCardProjection,
+  buildViewerEngagementLookupStages,
+} from "../utils/tweetAggregation.js";
 
 function buildFeedPostsPipeline(userObjectId, loggedInUserObjectId) {
   return [
@@ -58,23 +24,9 @@ function buildFeedPostsPipeline(userObjectId, loggedInUserObjectId) {
     {
       $unwind: "$user",
     },
-    ...buildBookmarkLookupStages(loggedInUserObjectId),
+    ...buildViewerEngagementLookupStages(loggedInUserObjectId),
     {
-      $project: {
-        _id: 1,
-        userId: 1,
-        content: 1,
-        media: 1,
-        likesCount: 1,
-        commentsCount: 1,
-        viewsCount: 1,
-        retweetsCount: 1,
-        createdAt: 1,
-        isBookmarked: 1,
-        "user.fullName": 1,
-        "user.username": 1,
-        "user.profilePic": 1,
-      },
+      $project: buildTweetCardProjection(),
     },
     {
       $sort: { createdAt: -1 },

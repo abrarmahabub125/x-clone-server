@@ -5,6 +5,8 @@ import {
   getSingleTweet,
   getTweets,
   getUserTweets,
+  likeTweet,
+  unlikeTweet,
 } from "../controllers/tweetControllers.js";
 import { verifyAccessToken } from "../middleware/verifyAccessToken.js";
 
@@ -19,5 +21,9 @@ router.get("/users/:userId/tweets", getUserTweets);
 
 // ================= POST REQUESTS =================
 router.post("/tweets", verifyAccessToken, createTweet);
+router.post("/tweets/:tweetId/likes", verifyAccessToken, likeTweet);
+
+// ================= DELETE REQUESTS ===============
+router.delete("/tweets/:tweetId/likes", verifyAccessToken, unlikeTweet);
 
 export { router };
