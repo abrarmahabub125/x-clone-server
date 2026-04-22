@@ -3,7 +3,6 @@ import express from "express";
 import {
   createTweet,
   getSingleTweet,
-  getTweets,
   getUserTweets,
   likeTweet,
   unlikeTweet,
@@ -15,7 +14,6 @@ const router = express.Router();
 // Tweet routes cover feed reads and tweet creation.
 
 // ================= GET REQUESTS ==================
-router.get("/tweets", getTweets);
 router.get("/tweets/:id", getSingleTweet);
 router.get("/users/:userId/tweets", getUserTweets);
 

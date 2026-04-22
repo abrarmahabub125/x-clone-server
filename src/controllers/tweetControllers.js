@@ -28,14 +28,6 @@ async function getTweetById(db, tweetObjectId) {
     .findOne({ _id: tweetObjectId }, { projection: { likesCount: 1 } });
 }
 
-export async function getTweets(req, res) {
-  return sendError(res, {
-    statusCode: 501,
-    code: "NOT_IMPLEMENTED",
-    message: "Tweet feed retrieval is not implemented yet.",
-  });
-}
-
 export async function getSingleTweet(req, res, next) {
   const { id } = req.params;
 
@@ -261,18 +253,15 @@ export async function unlikeTweet(req, res, next) {
       });
     }
 
-    await db.collection(TWEETS_COLLECTION).updateOne(
-      { _id: tweetObjectId },
-      [
-        {
-          $set: {
-            likesCount: {
-              $max: [{ $subtract: ["$likesCount", 1] }, 0],
-            },
+    await db.collection(TWEETS_COLLECTION).updateOne({ _id: tweetObjectId }, [
+      {
+        $set: {
+          likesCount: {
+            $max: [{ $subtract: ["$likesCount", 1] }, 0],
           },
         },
-      ],
-    );
+      },
+    ]);
 
     const updatedTweet = await getTweetById(db, tweetObjectId);
     const currentLikesCount = Number(tweet.likesCount) || 0;
@@ -282,7 +271,8 @@ export async function unlikeTweet(req, res, next) {
       data: {
         tweetId,
         isLiked: false,
-        likesCount: updatedTweet?.likesCount ?? Math.max(currentLikesCount - 1, 0),
+        likesCount:
+          updatedTweet?.likesCount ?? Math.max(currentLikesCount - 1, 0),
       },
     });
   } catch (error) {

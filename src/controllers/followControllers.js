@@ -118,8 +118,8 @@ export async function getFollowStatus(req, res, next) {
 // Follow user
 export async function followUser(req, res, next) {
   const db = getDB();
-  const followerId = new ObjectId(req.user.id); // er user er following update hobe +1
-  const followingId = new ObjectId(req.params.followingId); // ei user er follower update hobe +1
+  const followerId = new ObjectId(req.user.id); //  following update +1
+  const followingId = new ObjectId(req.params.followingId); // follower update +1
 
   // check is user trying to follow yourself
   if (followerId.equals(followingId)) {
