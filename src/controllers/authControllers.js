@@ -381,8 +381,16 @@ export async function getMe(req, res, next) {
       });
     }
 
-    const { username, profilePic, coverPhoto, location, bio, fullName } =
-      profileData;
+    const {
+      username,
+      profilePic,
+      coverPhoto,
+      location,
+      bio,
+      fullName,
+      followers,
+      following,
+    } = profileData;
 
     return sendSuccess(res, {
       message: "Authenticated user retrieved successfully.",
@@ -397,6 +405,8 @@ export async function getMe(req, res, next) {
           profilePic,
           coverPhoto,
           location,
+          followers: followers.length,
+          following: following.length,
         },
       },
     });
