@@ -5,78 +5,130 @@ import {
   buildViewerEngagementLookupStages,
 } from "../utils/tweetAggregation.js";
 
-function buildFeedPostsPipeline(userObjectId, loggedInUserObjectId) {
-  return [
-    {
-      $match: {
-        userId: { $ne: userObjectId },
-      },
-    },
-    {
-      // Join profile data once so every tweet card includes its author fields.
-      $lookup: {
-        from: "profiles",
-        localField: "userId",
-        foreignField: "userId",
-        as: "user",
-      },
-    },
-    {
-      $unwind: "$user",
-    },
-    ...buildViewerEngagementLookupStages(loggedInUserObjectId),
-    {
-      $project: buildTweetCardProjection(),
-    },
-    {
-      $sort: { createdAt: -1 },
-    },
-  ];
-}
-
 export async function forYouFeed(req, res, next) {
   const db = getDB();
   const loggedInUserId = req.user.id;
 
+  const { cursor, limit = 10 } = req.query;
+
+  const matchStage = {
+    userId: { $ne: new ObjectId(loggedInUserId) },
+  };
+
+  // SAFE CURSOR HANDLING
+  if (cursor && ObjectId.isValid(cursor)) {
+    matchStage._id = {
+      $lt: new ObjectId(cursor),
+    };
+  }
+
   try {
     const feedPosts = await db
       .collection("tweets")
-      .aggregate(
-        buildFeedPostsPipeline(
-          new ObjectId(loggedInUserId),
-          new ObjectId(loggedInUserId),
-        ),
-      )
-      .sort({ createdAt: -1 })
+      .aggregate([
+        {
+          $match: matchStage,
+        },
+        {
+          $lookup: {
+            from: "profiles",
+            localField: "userId",
+            foreignField: "userId",
+            as: "user",
+          },
+        },
+        {
+          $unwind: "$user",
+        },
+        ...buildViewerEngagementLookupStages(loggedInUserId),
+        {
+          $sort: { createdAt: -1 },
+        },
+        {
+          $limit: Number(limit),
+        },
+        {
+          $project: buildTweetCardProjection(),
+        },
+      ])
       .toArray();
+
+    const nextCursor =
+      feedPosts.length > 0 ? feedPosts[feedPosts.length - 1]._id : null;
+
+    const hasMore = feedPosts.length === Number(limit);
 
     res.status(200).json({
       message: "Feed posts retrieved successfully.",
+      nextCursor,
+      hasMore,
       data: feedPosts,
     });
   } catch (err) {
     next(err);
   }
 }
+
 export async function followingFeed(req, res, next) {
   const db = getDB();
   const loggedInUserId = req.user.id;
 
+  const { cursor, limit = 10 } = req.query;
+
+  const matchStage = {
+    userId: { $ne: new ObjectId(loggedInUserId) },
+  };
+
+  // SAFE CURSOR HANDLING
+  if (cursor && ObjectId.isValid(cursor)) {
+    matchStage._id = {
+      $lt: new ObjectId(cursor),
+    };
+  }
+
   try {
-    const followingPost = await db
+    const followingPosts = await db
       .collection("tweets")
-      .aggregate(
-        buildFeedPostsPipeline(
-          new ObjectId(loggedInUserId),
-          new ObjectId(loggedInUserId),
-        ),
-      )
-      .sort({ createdAt: -1 })
+      .aggregate([
+        {
+          $match: matchStage,
+        },
+        {
+          $lookup: {
+            from: "profiles",
+            localField: "userId",
+            foreignField: "userId",
+            as: "user",
+          },
+        },
+        {
+          $unwind: "$user",
+        },
+        ...buildViewerEngagementLookupStages(loggedInUserId),
+        {
+          $sort: { createdAt: -1 },
+        },
+        {
+          $limit: Number(limit),
+        },
+        {
+          $project: buildTweetCardProjection(),
+        },
+      ])
       .toArray();
+
+    const nextCursor =
+      followingPosts.length > 0
+        ? followingPosts[followingPosts.length - 1]._id
+        : null;
+
+    const hasMore = followingPosts.length === Number(limit);
 
     res.status(200).json({
       message: "Feed posts retrieved successfully.",
-      data: followingPost,
+      nextCursor,
+      hasMore,
+      data: followingPosts,
     });
   } catch (err) {
     next(err);
