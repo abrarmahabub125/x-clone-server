@@ -5,97 +5,127 @@ import { sendSuccess } from "../utils/apiResponse.js";
 const PROFILES_COLLECTION = "profiles";
 const FOLLOW_COLLECTION = "relations";
 
-const COMPACT_PROFILE_PROJECTION = {
-  userId: 1,
-  fullName: 1,
-  username: 1,
-  profilePic: 1,
-};
-const EXTENDED_PROFILE_PROJECTION = {
-  ...COMPACT_PROFILE_PROJECTION,
-  bio: 1,
-};
-
-async function findSuggestedProfiles({
-  loggedInUserId,
-  limit,
-  projection,
-  sort,
-}) {
-  const cursor = getDB()
-    .collection(PROFILES_COLLECTION)
-    .find({ userId: { $ne: new ObjectId(loggedInUserId) } }, { projection });
-
-  if (sort) {
-    cursor.sort(sort);
-  }
-
-  return cursor.limit(limit).toArray();
-}
+/**
+ * find user who are not Followed
+ *  skip logged in user
+ */
 
 export async function getWhoToFollow(req, res, next) {
+  const loggedInUserId = new ObjectId(req.user.id);
+  const { limit } = req.query;
+
+  console.log(limit);
+
   try {
-    const loggedInUserId = req.user.id;
+    const db = getDB();
 
-    // Keep this payload small because it is rendered in compact suggestion UIs.
-    const suggestedProfiles = await findSuggestedProfiles({
-      loggedInUserId,
-      limit: 3,
-      projection: COMPACT_PROFILE_PROJECTION,
-      sort: { username: 1 },
-    });
+    const peopleWhoToFollow = await db
+      .collection(PROFILES_COLLECTION)
+      .aggregate([
+        { $match: { userId: { $ne: loggedInUserId } } },
+        {
+          $lookup: {
+            from: FOLLOW_COLLECTION,
+            let: { userID: "$userId" },
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $and: [
+                      { $eq: ["$followerId", loggedInUserId] },
+                      { $eq: ["$followingId", "$$userID"] },
+                    ],
+                  },
+                },
+              },
+            ],
+            as: "followData",
+          },
+        },
+        {
+          $match: {
+            followData: { $size: 0 },
+          },
+        },
+        { $limit: Number(limit) },
+        {
+          $project: {
+            followData: 0,
+            coverPhoto: 0,
+            location: 0,
+            totalPost: 0,
+            followers: 0,
+            following: 0,
+          },
+        },
+      ])
+      .toArray();
 
-    return sendSuccess(res, {
-      message: "Suggested users retrieved successfully.",
-      data: suggestedProfiles,
-      meta: {
-        count: suggestedProfiles.length,
-      },
+    res.status(200).json({
+      success: true,
+      message: "Suggestion found",
+      data: peopleWhoToFollow,
     });
-  } catch (error) {
-    next(error);
-  }
-}
-
-export async function getWhoToConnect(req, res, next) {
-  const loggedInUserId = req.user.id;
-  try {
-    const suggestedProfiles = await findSuggestedProfiles({
-      loggedInUserId,
-      limit: 30,
-      projection: EXTENDED_PROFILE_PROJECTION,
-    });
-
-    return sendSuccess(res, {
-      message: "Suggested connections retrieved successfully.",
-      data: suggestedProfiles,
-      meta: {
-        count: suggestedProfiles.length,
-      },
-    });
-  } catch (error) {
-    next(error);
+  } catch (err) {
+    next(err);
   }
 }
 
 export async function getCreators(req, res, next) {
-  const loggedInUserId = req.user.id;
-  try {
-    const suggestedProfiles = await findSuggestedProfiles({
-      loggedInUserId,
-      limit: 15,
-      projection: EXTENDED_PROFILE_PROJECTION,
-    });
+  const loggedInUserId = new ObjectId(req.user.id);
+  const { limit } = req.query;
 
-    return sendSuccess(res, {
-      message: "Suggested creators retrieved successfully.",
-      data: suggestedProfiles,
-      meta: {
-        count: suggestedProfiles.length,
-      },
+  try {
+    const db = getDB();
+
+    const peopleWhoToFollow = await db
+      .collection(PROFILES_COLLECTION)
+      .aggregate([
+        { $match: { userId: { $ne: loggedInUserId } } },
+        {
+          $lookup: {
+            from: FOLLOW_COLLECTION,
+            let: { userID: "$userId" },
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $and: [
+                      { $eq: ["$followerId", loggedInUserId] },
+                      { $eq: ["$followingId", "$$userID"] },
+                    ],
+                  },
+                },
+              },
+            ],
+            as: "followData",
+          },
+        },
+        {
+          $match: {
+            followData: { $size: 0 },
+          },
+        },
+        {
+          $project: {
+            followData: 0,
+            coverPhoto: 0,
+            location: 0,
+            totalPost: 0,
+            followers: 0,
+            following: 0,
+          },
+        },
+      ])
+      .toArray();
+
+    res.status(200).json({
+      success: true,
+      message: "Suggestion found",
+      data: peopleWhoToFollow,
     });
-  } catch (error) {
-    next(error);
+  } catch (err) {
+    next(err);
   }
 }
 

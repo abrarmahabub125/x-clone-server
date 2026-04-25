@@ -4,7 +4,6 @@ import {
   followUser,
   getCreators,
   getFollowStatus,
-  getWhoToConnect,
   getWhoToFollow,
   unfollowUser,
 } from "../controllers/followControllers.js";
@@ -14,7 +13,6 @@ const router = express.Router();
 
 // Discovery routes power follow and creator suggestion surfaces.
 router.get("/users/who-to-follow", verifyAccessToken, getWhoToFollow);
-router.get("/users/connect", verifyAccessToken, getWhoToConnect);
 router.get("/users/creators", verifyAccessToken, getCreators);
 
 // ------------------------- Follow routes ---------------------------
