@@ -3,6 +3,7 @@ import cors from "cors";
 import helmet from "helmet";
 import cookieParser from "cookie-parser";
 import morgan from "morgan";
+import compression from "compression";
 import { router as authRouter } from "./src/routes/authRoutes.js";
 import { router as profileRouter } from "./src/routes/userRoutes.js";
 import { router as followRouter } from "./src/routes/followRoutes.js";
@@ -69,6 +70,7 @@ app.use(helmet());
 app.use(express.json());
 app.use(cookieParser());
 app.use(morgan("combined"));
+app.use(compression());
 app.use(express.urlencoded({ extended: true }));
 
 // API endpoints

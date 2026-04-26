@@ -16,6 +16,7 @@ import sendOTP from "../utils/otpMailer.js";
 import loginSchema from "../validations/loginSchema.js";
 import registerSchema from "../validations/registerSchema.js";
 import updateProfileSchema from "../validations/updateProfileSchema.js";
+import { success } from "zod";
 
 const USERS_COLLECTION = "users";
 const PROFILES_COLLECTION = "profiles";
@@ -408,97 +409,6 @@ export async function getMe(req, res, next) {
           followers: followers.length,
           following: following.length,
         },
-      },
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-
-export async function updateProfile(req, res, next) {
-  try {
-    const user = req.user;
-
-    if (!user?.id || !ObjectId.isValid(user.id)) {
-      return sendError(res, {
-        statusCode: 401,
-        code: "INVALID_TOKEN_PAYLOAD",
-        message: "The authenticated user id is invalid.",
-      });
-    }
-
-    const result = await updateProfileSchema.safeParseAsync(req.body);
-
-    if (!result.success) {
-      throw createValidationError(
-        result.error.issues,
-        "Profile update validation failed.",
-      );
-    }
-
-    const { fullName, bio, location, profilePic, coverPhoto } = result.data;
-    const db = getDB();
-    const userObjectId = new ObjectId(user.id);
-    const usersCollection = db.collection(USERS_COLLECTION);
-    const profilesCollection = db.collection(PROFILES_COLLECTION);
-    const updatedAt = new Date();
-    const session = client.startSession();
-    let userUpdateResult;
-    let profileUpdateResult;
-
-    try {
-      await session.withTransaction(async () => {
-        userUpdateResult = await usersCollection.updateOne(
-          { _id: userObjectId },
-          {
-            $set: {
-              fullName,
-              updatedAt,
-            },
-          },
-          { session },
-        );
-
-        profileUpdateResult = await profilesCollection.updateOne(
-          { userId: userObjectId },
-          {
-            $set: {
-              fullName,
-              bio,
-              location,
-              profilePic,
-              coverPhoto,
-              updatedAt,
-            },
-          },
-          { session },
-        );
-      });
-    } finally {
-      await session.endSession();
-    }
-
-    if (
-      !userUpdateResult ||
-      !profileUpdateResult ||
-      userUpdateResult.matchedCount === 0 ||
-      profileUpdateResult.matchedCount === 0
-    ) {
-      return sendError(res, {
-        statusCode: 404,
-        code: "PROFILE_NOT_FOUND",
-        message: "Profile data could not be found for the authenticated user.",
-      });
-    }
-
-    return sendSuccess(res, {
-      message: "Profile updated successfully.",
-      data: {
-        fullName,
-        bio,
-        location,
-        profilePic,
-        coverPhoto,
       },
     });
   } catch (error) {

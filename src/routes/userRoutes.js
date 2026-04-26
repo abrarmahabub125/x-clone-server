@@ -8,7 +8,7 @@ import {
   getUserReplies,
 } from "../controllers/userControllers.js";
 import { verifyAccessToken } from "../middleware/verifyAccessToken.js";
-import { updateProfile } from "../controllers/authControllers.js";
+import { updateProfile } from "../controllers/userControllers.js";
 
 const router = express.Router();
 

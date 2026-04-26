@@ -1,39 +1,29 @@
 import { ObjectId } from "mongodb";
-
-import { getDB } from "../config/db.js";
+import { getDB, client } from "../config/db.js";
 import { sendError, sendSuccess } from "../utils/apiResponse.js";
 import {
   buildTweetCardProjection,
   buildViewerEngagementLookupStages,
   LIKES_COLLECTION,
 } from "../utils/tweetAggregation.js";
+import updateProfileSchema from "../validations/updateProfileSchema.js";
 
 const USERS_COLLECTION = "users";
 const PROFILES_COLLECTION = "profiles";
 const TWEETS_COLLECTION = "tweets";
 
-function buildUserPostsPipeline(
-  userObjectId,
-  loggedInUserObjectId,
-  options = {},
-) {
-  const { onlyMedia = false } = options;
+const toObjectId = (id) => new ObjectId(id);
+const isValidObjectId = (id) => ObjectId.isValid(id);
 
+function buildUserPostsPipeline(userId, viewerId, { onlyMedia = false } = {}) {
   return [
     {
       $match: {
-        userId: userObjectId,
+        userId,
         ...(onlyMedia && {
           $or: [
-            {
-              media: {
-                $type: "string",
-                $ne: "",
-              },
-            },
-            {
-              "media.0": { $exists: true },
-            },
+            { media: { $type: "string", $ne: "" } },
+            { "media.0": { $exists: true } },
           ],
         }),
       },
@@ -46,31 +36,17 @@ function buildUserPostsPipeline(
         as: "user",
       },
     },
-    {
-      $unwind: "$user",
-    },
-    ...buildViewerEngagementLookupStages(loggedInUserObjectId),
-    {
-      $project: buildTweetCardProjection(),
-    },
-    {
-      $sort: { createdAt: -1 },
-    },
+    { $unwind: "$user" },
+    ...buildViewerEngagementLookupStages(viewerId),
+    { $project: buildTweetCardProjection() },
+    { $sort: { createdAt: -1 } },
   ];
 }
 
-function buildUserLikesPipeline(userObjectId, loggedInUserObjectId) {
+function buildUserLikesPipeline(userId, viewerId) {
   return [
-    {
-      $match: {
-        userId: userObjectId,
-      },
-    },
-    {
-      $sort: {
-        createdAt: -1,
-      },
-    },
+    { $match: { userId } },
+    { $sort: { createdAt: -1 } },
     {
       $lookup: {
         from: TWEETS_COLLECTION,
@@ -79,9 +55,7 @@ function buildUserLikesPipeline(userObjectId, loggedInUserObjectId) {
         as: "tweet",
       },
     },
-    {
-      $unwind: "$tweet",
-    },
+    { $unwind: "$tweet" },
     {
       $lookup: {
         from: PROFILES_COLLECTION,
@@ -90,10 +64,8 @@ function buildUserLikesPipeline(userObjectId, loggedInUserObjectId) {
         as: "user",
       },
     },
-    {
-      $unwind: "$user",
-    },
-    ...buildViewerEngagementLookupStages(loggedInUserObjectId, "$tweet._id"),
+    { $unwind: "$user" },
+    ...buildViewerEngagementLookupStages(viewerId, "$tweet._id"),
     {
       $project: buildTweetCardProjection({
         _id: "$tweet._id",
@@ -117,45 +89,46 @@ export async function getProfile(req, res, next) {
   try {
     const { id } = req.params;
 
-    if (!ObjectId.isValid(id)) {
+    if (!isValidObjectId(id)) {
       return sendError(res, {
         statusCode: 400,
         code: "INVALID_USER_ID",
-        message: "The provided user id is invalid.",
+        message: "Invalid user ID.",
       });
     }
 
     const db = getDB();
-    const userObjectId = new ObjectId(id);
-    const userFullName = await db
-      .collection(USERS_COLLECTION)
-      .findOne({ _id: userObjectId }, { projection: { fullName: 1 } });
+    const userId = toObjectId(id);
 
-    if (!userFullName) {
+    const user = await db
+      .collection(USERS_COLLECTION)
+      .findOne({ _id: userId }, { projection: { fullName: 1 } });
+
+    if (!user) {
       return sendError(res, {
         statusCode: 404,
         code: "USER_NOT_FOUND",
-        message: "No user was found for the provided id.",
+        message: "User not found.",
       });
     }
 
-    const userProfile = await db.collection(PROFILES_COLLECTION).findOne({
-      userId: userObjectId,
-    });
+    const profile = await db
+      .collection(PROFILES_COLLECTION)
+      .findOne({ userId });
 
-    if (!userProfile) {
+    if (!profile) {
       return sendError(res, {
         statusCode: 404,
         code: "PROFILE_NOT_FOUND",
-        message: "No profile was found for the provided user id.",
+        message: "Profile not found.",
       });
     }
 
     return sendSuccess(res, {
-      message: "Profile retrieved successfully.",
+      message: "Profile fetched.",
       data: {
-        ...userProfile,
-        fullName: userFullName.fullName,
+        ...profile,
+        fullName: user.fullName,
       },
     });
   } catch (error) {
@@ -163,32 +136,174 @@ export async function getProfile(req, res, next) {
   }
 }
 
-export async function getUserPosts(req, res, next) {
-  const { id } = req.params;
-
-  if (!ObjectId.isValid(id)) {
-    return sendError(res, {
-      statusCode: 400,
-      code: "INVALID_USER_ID",
-      message: "The provided user id is invalid.",
-    });
-  }
-
+export async function updateProfile(req, res, next) {
   try {
     const db = getDB();
+    const user = req.user;
+
+    if (!user?.id || !isValidObjectId(user.id)) {
+      return sendError(res, {
+        statusCode: 401,
+        code: "INVALID_TOKEN",
+        message: "Unauthorized.",
+      });
+    }
+
+    const parsed = await updateProfileSchema.safeParseAsync(req.body);
+
+    if (!parsed.success) {
+      throw createValidationError(parsed.error.issues, "Validation failed.");
+    }
+
+    const { fullName, username, bio, location, profilePic, coverPhoto } =
+      parsed.data;
+
+    const userId = toObjectId(user.id);
+
+    const existing = await db.collection(PROFILES_COLLECTION).findOne({
+      username,
+      userId: { $ne: userId },
+    });
+
+    if (existing) {
+      return sendError(res, {
+        statusCode: 409,
+        code: "USERNAME_TAKEN",
+        message: "Username already taken.",
+      });
+    }
+
+    const session = client.startSession();
+    const updatedAt = new Date();
+
+    try {
+      await session.withTransaction(async () => {
+        await db
+          .collection(USERS_COLLECTION)
+          .updateOne(
+            { _id: userId },
+            { $set: { fullName, updatedAt } },
+            { session },
+          );
+
+        await db.collection(PROFILES_COLLECTION).updateOne(
+          { userId },
+          {
+            $set: {
+              fullName,
+              username,
+              bio,
+              location,
+              profilePic,
+              coverPhoto,
+              updatedAt,
+            },
+          },
+          { session },
+        );
+      });
+    } finally {
+      await session.endSession();
+    }
+
+    return sendSuccess(res, {
+      message: "Profile updated.",
+      data: { fullName, bio, location, profilePic, coverPhoto },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getUserPosts(req, res, next) {
+  try {
+    const { id } = req.params;
+
+    if (!isValidObjectId(id)) {
+      return sendError(res, {
+        statusCode: 400,
+        code: "INVALID_USER_ID",
+        message: "Invalid user ID.",
+      });
+    }
+
+    const db = getDB();
+
     const posts = await db
       .collection(TWEETS_COLLECTION)
       .aggregate(
-        buildUserPostsPipeline(new ObjectId(id), new ObjectId(req.user.id)),
+        buildUserPostsPipeline(toObjectId(id), toObjectId(req.user.id)),
       )
       .toArray();
 
     return sendSuccess(res, {
-      message: "User posts retrieved successfully.",
+      message: "Posts fetched.",
       data: posts,
-      meta: {
-        count: posts.length,
-      },
+      meta: { count: posts.length },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getUserMedia(req, res, next) {
+  try {
+    const { id } = req.params;
+
+    if (!isValidObjectId(id)) {
+      return sendError(res, {
+        statusCode: 400,
+        code: "INVALID_USER_ID",
+        message: "Invalid user ID.",
+      });
+    }
+
+    const db = getDB();
+
+    const posts = await db
+      .collection(TWEETS_COLLECTION)
+      .aggregate(
+        buildUserPostsPipeline(toObjectId(id), toObjectId(req.user.id), {
+          onlyMedia: true,
+        }),
+      )
+      .toArray();
+
+    return sendSuccess(res, {
+      message: "Media fetched.",
+      data: posts,
+      meta: { count: posts.length },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getUserLikes(req, res, next) {
+  try {
+    const { id } = req.params;
+
+    if (!isValidObjectId(id)) {
+      return sendError(res, {
+        statusCode: 400,
+        code: "INVALID_USER_ID",
+        message: "Invalid user ID.",
+      });
+    }
+
+    const db = getDB();
+
+    const posts = await db
+      .collection(LIKES_COLLECTION)
+      .aggregate(
+        buildUserLikesPipeline(toObjectId(id), toObjectId(req.user.id)),
+      )
+      .toArray();
+
+    return sendSuccess(res, {
+      message: "Likes fetched.",
+      data: posts,
+      meta: { count: posts.length },
     });
   } catch (error) {
     next(error);
@@ -199,72 +314,6 @@ export async function getUserReplies(req, res) {
   return sendError(res, {
     statusCode: 501,
     code: "NOT_IMPLEMENTED",
-    message: "User replies retrieval is not implemented yet.",
+    message: "Not implemented.",
   });
-}
-
-export async function getUserMedia(req, res, next) {
-  const { id } = req.params;
-
-  if (!ObjectId.isValid(id)) {
-    return sendError(res, {
-      statusCode: 400,
-      code: "INVALID_USER_ID",
-      message: "The provided user id is invalid.",
-    });
-  }
-
-  try {
-    const db = getDB();
-    const posts = await db
-      .collection(TWEETS_COLLECTION)
-      .aggregate(
-        buildUserPostsPipeline(new ObjectId(id), new ObjectId(req.user.id), {
-          onlyMedia: true,
-        }),
-      )
-      .toArray();
-
-    return sendSuccess(res, {
-      message: "User medias retrieved successfully.",
-      data: posts,
-      meta: {
-        count: posts.length,
-      },
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-
-export async function getUserLikes(req, res, next) {
-  const { id } = req.params;
-
-  if (!ObjectId.isValid(id)) {
-    return sendError(res, {
-      statusCode: 400,
-      code: "INVALID_USER_ID",
-      message: "The provided user id is invalid.",
-    });
-  }
-
-  try {
-    const db = getDB();
-    const posts = await db
-      .collection(LIKES_COLLECTION)
-      .aggregate(
-        buildUserLikesPipeline(new ObjectId(id), new ObjectId(req.user.id)),
-      )
-      .toArray();
-
-    return sendSuccess(res, {
-      message: "User likes retrieved successfully.",
-      data: posts,
-      meta: {
-        count: posts.length,
-      },
-    });
-  } catch (error) {
-    next(error);
-  }
 }
