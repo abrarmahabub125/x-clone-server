@@ -74,25 +74,56 @@ export async function followingFeed(req, res, next) {
   const loggedInUserId = req.user.id;
 
   const { cursor, limit = 10 } = req.query;
-
-  const matchStage = {
-    userId: { $ne: new ObjectId(loggedInUserId) },
-  };
-
-  // SAFE CURSOR HANDLING
-  if (cursor && ObjectId.isValid(cursor)) {
-    matchStage._id = {
-      $lt: new ObjectId(cursor),
-    };
-  }
+  const parsedLimit = Number(limit);
 
   try {
     const followingPosts = await db
-      .collection("tweets")
+      .collection("relations")
       .aggregate([
         {
-          $match: matchStage,
+          $match: {
+            followerId: new ObjectId(loggedInUserId),
+          },
         },
+
+        {
+          $lookup: {
+            from: "tweets",
+            localField: "followingId",
+            foreignField: "userId",
+            as: "tweets",
+          },
+        },
+
+        {
+          $unwind: "$tweets",
+        },
+
+        {
+          $replaceRoot: {
+            newRoot: "$tweets",
+          },
+        },
+
+        ...(cursor && ObjectId.isValid(cursor)
+          ? [
+              {
+                $match: {
+                  _id: {
+                    $lt: new ObjectId(cursor),
+                  },
+                },
+              },
+            ]
+          : []),
+
+        {
+          $sort: {
+            createdAt: -1,
+            _id: -1,
+          },
+        },
+
         {
           $lookup: {
             from: "profiles",
@@ -101,18 +132,18 @@ export async function followingFeed(req, res, next) {
             as: "user",
           },
         },
+
         {
           $unwind: "$user",
         },
-        ...buildViewerEngagementLookupStages(loggedInUserId),
-        {
-          $sort: { createdAt: -1 },
-        },
-        {
-          $limit: Number(limit),
-        },
+
         {
           $project: buildTweetCardProjection(),
+        },
+
+        // extra 1 item for hasMore check
+        {
+          $limit: parsedLimit + 1,
         },
       ])
       .toArray();
@@ -125,7 +156,7 @@ export async function followingFeed(req, res, next) {
     const hasMore = followingPosts.length === Number(limit);
 
     res.status(200).json({
-      message: "Feed posts retrieved successfully.",
+      message: "Following posts retrieved successfully.",
       nextCursor,
       hasMore,
       data: followingPosts,
