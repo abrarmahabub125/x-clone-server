@@ -24,6 +24,20 @@ function assertCloudinaryConfig() {
   };
 }
 
+function assertUploadRuntimeSupport() {
+  if (
+    typeof globalThis.fetch !== "function" ||
+    typeof globalThis.FormData !== "function"
+  ) {
+    throw createAppError({
+      statusCode: 500,
+      code: "UPLOAD_RUNTIME_NOT_SUPPORTED",
+      message:
+        "The server runtime does not support image uploads. Use Node.js 18 or newer in production.",
+    });
+  }
+}
+
 function buildCloudinarySignature({ folder, timestamp }, apiSecret) {
   const signaturePayload = `folder=${folder}&timestamp=${timestamp}${apiSecret}`;
 
@@ -44,6 +58,7 @@ export async function uploadTweetImageToCloudinary(dataUrl) {
   }
 
   const { cloudName, apiKey, apiSecret } = assertCloudinaryConfig();
+  assertUploadRuntimeSupport();
   const timestamp = Math.floor(Date.now() / 1000);
   const signature = buildCloudinarySignature(
     {
