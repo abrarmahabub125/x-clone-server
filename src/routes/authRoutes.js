@@ -1,10 +1,13 @@
 import express from "express";
 
 import {
+  deleteAccount,
   getMe,
   login,
   logout,
   register,
+  updateEmail,
+  updatePassword,
   verifyOTP,
 } from "../controllers/authControllers.js";
 import { verifyAccessToken } from "../middleware/verifyAccessToken.js";
@@ -18,5 +21,8 @@ router.post("/auth/login", login);
 router.post("/auth/verify-otp", verifyTempCookie, verifyOTP);
 router.get("/auth/get-me", verifyAccessToken, getMe);
 router.post("/auth/logout", logout);
+router.patch("/auth/email", verifyAccessToken, updateEmail);
+router.patch("/auth/password", verifyAccessToken, updatePassword);
+router.delete("/auth/account", verifyAccessToken, deleteAccount);
 
 export { router };

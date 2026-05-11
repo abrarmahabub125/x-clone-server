@@ -13,13 +13,23 @@ import {
   generateTempToken,
 } from "../utils/jwtSignAndCompare.js";
 import sendOTP from "../utils/otpMailer.js";
+import {
+  deleteAccountSchema,
+  updateEmailSchema,
+  updatePasswordSchema,
+} from "../validations/accountSettingsSchema.js";
 import loginSchema from "../validations/loginSchema.js";
 import registerSchema from "../validations/registerSchema.js";
 import updateProfileSchema from "../validations/updateProfileSchema.js";
-import { success } from "zod";
 
 const USERS_COLLECTION = "users";
 const PROFILES_COLLECTION = "profiles";
+const TWEETS_COLLECTION = "tweets";
+const LIKES_COLLECTION = "likes";
+const BOOKMARKS_COLLECTION = "bookmarks";
+const RETWEETS_COLLECTION = "retweets";
+const TWEET_VIEWS_COLLECTION = "tweetViews";
+const FOLLOW_RELATIONS_COLLECTION = "relations";
 const TEMP_TOKEN_MAX_AGE = 10 * 60 * 1000;
 const ACCESS_TOKEN_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
 
@@ -68,6 +78,43 @@ function createUserProfile(userId, fullName) {
     joinedAt: new Date(),
     followers: [],
     following: [],
+  };
+}
+
+function getAuthenticatedUserId(req) {
+  const authenticatedUserId = req.user?.id;
+
+  return ObjectId.isValid(authenticatedUserId)
+    ? new ObjectId(authenticatedUserId)
+    : null;
+}
+
+async function getAuthenticatedUserDocument(db, req) {
+  const authenticatedUserId = getAuthenticatedUserId(req);
+
+  if (!authenticatedUserId) {
+    throw createAppError({
+      statusCode: 401,
+      code: "INVALID_TOKEN_PAYLOAD",
+      message: "The authenticated user id is invalid.",
+    });
+  }
+
+  const userDocument = await db
+    .collection(USERS_COLLECTION)
+    .findOne({ _id: authenticatedUserId });
+
+  if (!userDocument) {
+    throw createAppError({
+      statusCode: 404,
+      code: "USER_NOT_FOUND",
+      message: "The authenticated user account could not be found.",
+    });
+  }
+
+  return {
+    authenticatedUserId,
+    userDocument,
   };
 }
 
@@ -422,4 +469,298 @@ export async function resetPassword(req, res) {
     code: "NOT_IMPLEMENTED",
     message: "Reset password is not implemented yet.",
   });
+}
+
+export async function updateEmail(req, res, next) {
+  try {
+    const parsedResult = await updateEmailSchema.safeParseAsync(req.body);
+
+    if (!parsedResult.success) {
+      throw createValidationError(
+        parsedResult.error.issues,
+        "Email update validation failed.",
+      );
+    }
+
+    const { newEmail, currentPassword } = parsedResult.data;
+    const db = getDB();
+    const { authenticatedUserId, userDocument } = await getAuthenticatedUserDocument(
+      db,
+      req,
+    );
+
+    if (userDocument.email === newEmail) {
+      throw createAppError({
+        statusCode: 400,
+        code: "EMAIL_UNCHANGED",
+        message: "Your new email must be different from your current email.",
+      });
+    }
+
+    const isPasswordMatch = await compareWithBcryptHash(
+      currentPassword,
+      userDocument.password,
+    );
+
+    if (!isPasswordMatch) {
+      throw createAppError({
+        statusCode: 401,
+        code: "INVALID_CURRENT_PASSWORD",
+        message: "Your current password is incorrect.",
+      });
+    }
+
+    const existingUser = await db.collection(USERS_COLLECTION).findOne({
+      email: newEmail,
+      _id: { $ne: authenticatedUserId },
+    });
+
+    if (existingUser) {
+      throw createAppError({
+        statusCode: 409,
+        code: "EMAIL_ALREADY_IN_USE",
+        message: "Another account is already using this email address.",
+      });
+    }
+
+    await db.collection(USERS_COLLECTION).updateOne(
+      { _id: authenticatedUserId },
+      {
+        $set: {
+          email: newEmail,
+          updatedAt: new Date(),
+        },
+      },
+    );
+
+    const nextToken = generateAccessToken({
+      id: authenticatedUserId.toString(),
+      email: newEmail,
+    });
+
+    res.cookie("token", nextToken, getAccessCookieOptions(req));
+
+    return sendSuccess(res, {
+      message: "Email updated successfully.",
+      data: {
+        email: newEmail,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function updatePassword(req, res, next) {
+  try {
+    const parsedResult = await updatePasswordSchema.safeParseAsync(req.body);
+
+    if (!parsedResult.success) {
+      throw createValidationError(
+        parsedResult.error.issues,
+        "Password update validation failed.",
+      );
+    }
+
+    const { currentPassword, newPassword } = parsedResult.data;
+    const db = getDB();
+    const { authenticatedUserId, userDocument } = await getAuthenticatedUserDocument(
+      db,
+      req,
+    );
+
+    const isPasswordMatch = await compareWithBcryptHash(
+      currentPassword,
+      userDocument.password,
+    );
+
+    if (!isPasswordMatch) {
+      throw createAppError({
+        statusCode: 401,
+        code: "INVALID_CURRENT_PASSWORD",
+        message: "Your current password is incorrect.",
+      });
+    }
+
+    const isSamePassword = await compareWithBcryptHash(
+      newPassword,
+      userDocument.password,
+    );
+
+    if (isSamePassword) {
+      throw createAppError({
+        statusCode: 400,
+        code: "PASSWORD_UNCHANGED",
+        message: "Your new password must be different from the current one.",
+      });
+    }
+
+    const hashedPassword = await generateBcryptHash(newPassword);
+
+    await db.collection(USERS_COLLECTION).updateOne(
+      { _id: authenticatedUserId },
+      {
+        $set: {
+          password: hashedPassword,
+          updatedAt: new Date(),
+        },
+      },
+    );
+
+    res.clearCookie("token", getAccessCookieClearOptions(req));
+
+    return sendSuccess(res, {
+      message: "Password updated successfully. Please sign in again.",
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function deleteAccount(req, res, next) {
+  try {
+    const parsedResult = await deleteAccountSchema.safeParseAsync(req.body);
+
+    if (!parsedResult.success) {
+      throw createValidationError(
+        parsedResult.error.issues,
+        "Account deletion validation failed.",
+      );
+    }
+
+    const { currentPassword } = parsedResult.data;
+    const db = getDB();
+    const { authenticatedUserId, userDocument } = await getAuthenticatedUserDocument(
+      db,
+      req,
+    );
+
+    const isPasswordMatch = await compareWithBcryptHash(
+      currentPassword,
+      userDocument.password,
+    );
+
+    if (!isPasswordMatch) {
+      throw createAppError({
+        statusCode: 401,
+        code: "INVALID_CURRENT_PASSWORD",
+        message: "Your current password is incorrect.",
+      });
+    }
+
+    const session = client.startSession();
+
+    try {
+      await session.withTransaction(async () => {
+        const ownedTweets = await db
+          .collection(TWEETS_COLLECTION)
+          .find(
+            { userId: authenticatedUserId },
+            { session, projection: { _id: 1 } },
+          )
+          .toArray();
+
+        const ownedTweetIds = ownedTweets.map((tweet) => tweet._id);
+
+        if (ownedTweetIds.length > 0) {
+          await db.collection(LIKES_COLLECTION).deleteMany(
+            {
+              tweetId: { $in: ownedTweetIds },
+            },
+            { session },
+          );
+          await db.collection(BOOKMARKS_COLLECTION).deleteMany(
+            {
+              tweetId: { $in: ownedTweetIds },
+            },
+            { session },
+          );
+          await db.collection(RETWEETS_COLLECTION).deleteMany(
+            {
+              tweetId: { $in: ownedTweetIds },
+            },
+            { session },
+          );
+          await db.collection(TWEET_VIEWS_COLLECTION).deleteMany(
+            {
+              tweetId: { $in: ownedTweetIds },
+            },
+            { session },
+          );
+          await db.collection(TWEETS_COLLECTION).deleteMany(
+            {
+              _id: { $in: ownedTweetIds },
+            },
+            { session },
+          );
+        }
+
+        await db.collection(LIKES_COLLECTION).deleteMany(
+          {
+            userId: authenticatedUserId,
+          },
+          { session },
+        );
+        await db.collection(BOOKMARKS_COLLECTION).deleteMany(
+          {
+            userId: authenticatedUserId,
+          },
+          { session },
+        );
+        await db.collection(RETWEETS_COLLECTION).deleteMany(
+          {
+            userId: authenticatedUserId,
+          },
+          { session },
+        );
+        await db.collection(TWEET_VIEWS_COLLECTION).deleteMany(
+          {
+            userId: authenticatedUserId,
+          },
+          { session },
+        );
+        await db.collection(FOLLOW_RELATIONS_COLLECTION).deleteMany(
+          {
+            $or: [
+              { followerId: authenticatedUserId },
+              { followingId: authenticatedUserId },
+            ],
+          },
+          { session },
+        );
+        await db.collection(PROFILES_COLLECTION).updateMany(
+          {},
+          {
+            $pull: {
+              followers: authenticatedUserId,
+              following: authenticatedUserId,
+            },
+          },
+          { session },
+        );
+        await db.collection(PROFILES_COLLECTION).deleteOne(
+          {
+            userId: authenticatedUserId,
+          },
+          { session },
+        );
+        await db.collection(USERS_COLLECTION).deleteOne(
+          {
+            _id: authenticatedUserId,
+          },
+          { session },
+        );
+      });
+    } finally {
+      await session.endSession();
+    }
+
+    res.clearCookie("token", getAccessCookieClearOptions(req));
+
+    return sendSuccess(res, {
+      message: "Account deleted successfully.",
+    });
+  } catch (error) {
+    next(error);
+  }
 }

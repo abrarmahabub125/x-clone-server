@@ -5,17 +5,27 @@ import {
   buildViewerEngagementLookupStages,
 } from "../utils/tweetAggregation.js";
 
+function normalizeFeedLimit(limit, fallback = 10) {
+  const parsedLimit = Number(limit);
+
+  if (!Number.isFinite(parsedLimit) || parsedLimit < 1) {
+    return fallback;
+  }
+
+  return Math.min(parsedLimit, 50);
+}
+
 export async function forYouFeed(req, res, next) {
   const db = getDB();
-  const loggedInUserId = req.user.id;
+  const loggedInUserId = new ObjectId(req.user.id);
 
   const { cursor, limit = 10 } = req.query;
+  const parsedLimit = normalizeFeedLimit(limit);
 
   const matchStage = {
-    userId: { $ne: new ObjectId(loggedInUserId) },
+    userId: { $ne: loggedInUserId },
   };
 
-  // SAFE CURSOR HANDLING
   if (cursor && ObjectId.isValid(cursor)) {
     matchStage._id = {
       $lt: new ObjectId(cursor),
@@ -42,10 +52,10 @@ export async function forYouFeed(req, res, next) {
         },
         ...buildViewerEngagementLookupStages(loggedInUserId),
         {
-          $sort: { createdAt: -1 },
+          $sort: { _id: -1 },
         },
         {
-          $limit: Number(limit),
+          $limit: parsedLimit + 1,
         },
         {
           $project: buildTweetCardProjection(),
@@ -53,16 +63,19 @@ export async function forYouFeed(req, res, next) {
       ])
       .toArray();
 
+    const visiblePosts = feedPosts.slice(0, parsedLimit);
     const nextCursor =
-      feedPosts.length > 0 ? feedPosts[feedPosts.length - 1]._id : null;
+      visiblePosts.length > 0
+        ? visiblePosts[visiblePosts.length - 1]._id
+        : null;
 
-    const hasMore = feedPosts.length === Number(limit);
+    const hasMore = feedPosts.length > parsedLimit;
 
     res.status(200).json({
       message: "Feed posts retrieved successfully.",
       nextCursor,
       hasMore,
-      data: feedPosts,
+      data: visiblePosts,
     });
   } catch (err) {
     next(err);
@@ -71,10 +84,10 @@ export async function forYouFeed(req, res, next) {
 
 export async function followingFeed(req, res, next) {
   const db = getDB();
-  const loggedInUserId = req.user.id;
+  const loggedInUserId = new ObjectId(req.user.id);
 
   const { cursor, limit = 10 } = req.query;
-  const parsedLimit = Number(limit);
+  const parsedLimit = normalizeFeedLimit(limit);
 
   try {
     const followingPosts = await db
@@ -82,10 +95,9 @@ export async function followingFeed(req, res, next) {
       .aggregate([
         {
           $match: {
-            followerId: new ObjectId(loggedInUserId),
+            followerId: loggedInUserId,
           },
         },
-
         {
           $lookup: {
             from: "tweets",
@@ -94,17 +106,27 @@ export async function followingFeed(req, res, next) {
             as: "tweets",
           },
         },
-
         {
           $unwind: "$tweets",
         },
-
         {
           $replaceRoot: {
             newRoot: "$tweets",
           },
         },
-
+        {
+          $group: {
+            _id: "$_id",
+            tweet: {
+              $first: "$$ROOT",
+            },
+          },
+        },
+        {
+          $replaceRoot: {
+            newRoot: "$tweet",
+          },
+        },
         ...(cursor && ObjectId.isValid(cursor)
           ? [
               {
@@ -116,14 +138,11 @@ export async function followingFeed(req, res, next) {
               },
             ]
           : []),
-
         {
           $sort: {
-            createdAt: -1,
             _id: -1,
           },
         },
-
         {
           $lookup: {
             from: "profiles",
@@ -132,34 +151,32 @@ export async function followingFeed(req, res, next) {
             as: "user",
           },
         },
-
         {
           $unwind: "$user",
         },
-
+        ...buildViewerEngagementLookupStages(loggedInUserId),
         {
           $project: buildTweetCardProjection(),
         },
-
-        // extra 1 item for hasMore check
         {
           $limit: parsedLimit + 1,
         },
       ])
       .toArray();
 
+    const visiblePosts = followingPosts.slice(0, parsedLimit);
     const nextCursor =
-      followingPosts.length > 0
-        ? followingPosts[followingPosts.length - 1]._id
+      visiblePosts.length > 0
+        ? visiblePosts[visiblePosts.length - 1]._id
         : null;
 
-    const hasMore = followingPosts.length === Number(limit);
+    const hasMore = followingPosts.length > parsedLimit;
 
     res.status(200).json({
       message: "Following posts retrieved successfully.",
       nextCursor,
       hasMore,
-      data: followingPosts,
+      data: visiblePosts,
     });
   } catch (err) {
     next(err);

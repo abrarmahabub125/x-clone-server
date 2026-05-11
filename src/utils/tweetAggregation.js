@@ -1,5 +1,6 @@
 const BOOKMARKS_COLLECTION = "bookmarks";
 const LIKES_COLLECTION = "likes";
+const RETWEETS_COLLECTION = "retweets";
 
 function buildEngagementLookupStage({
   collectionName,
@@ -43,6 +44,7 @@ export function buildViewerEngagementLookupStages(
         $addFields: {
           isBookmarked: false,
           isLiked: false,
+          isRetweeted: false,
         },
       },
     ];
@@ -61,6 +63,12 @@ export function buildViewerEngagementLookupStages(
       loggedInUserObjectId,
       tweetIdExpression,
     }),
+    buildEngagementLookupStage({
+      collectionName: RETWEETS_COLLECTION,
+      alias: "retweetMatch",
+      loggedInUserObjectId,
+      tweetIdExpression,
+    }),
     {
       $addFields: {
         isBookmarked: {
@@ -68,6 +76,9 @@ export function buildViewerEngagementLookupStages(
         },
         isLiked: {
           $gt: [{ $size: "$likeMatch" }, 0],
+        },
+        isRetweeted: {
+          $gt: [{ $size: "$retweetMatch" }, 0],
         },
       },
     },
@@ -87,6 +98,7 @@ export function buildTweetCardProjection(overrides = {}) {
     createdAt: 1,
     isBookmarked: 1,
     isLiked: 1,
+    isRetweeted: 1,
     "user.fullName": 1,
     "user.username": 1,
     "user.profilePic": 1,
@@ -94,4 +106,4 @@ export function buildTweetCardProjection(overrides = {}) {
   };
 }
 
-export { BOOKMARKS_COLLECTION, LIKES_COLLECTION };
+export { BOOKMARKS_COLLECTION, LIKES_COLLECTION, RETWEETS_COLLECTION };
