@@ -1,23 +1,23 @@
-import express from "express";
-import cors from "cors";
-import helmet from "helmet";
-import cookieParser from "cookie-parser";
-import morgan from "morgan";
 import compression from "compression";
+import cookieParser from "cookie-parser";
+import cors from "cors";
+import express from "express";
+import helmet from "helmet";
+import morgan from "morgan";
 import { router as authRouter } from "./src/routes/authRoutes.js";
-import { router as profileRouter } from "./src/routes/userRoutes.js";
-import { router as followRouter } from "./src/routes/followRoutes.js";
 import { router as bookmarkRouter } from "./src/routes/bookmarkRoutes.js";
-import { router as tweetRouter } from "./src/routes/tweetRoutes.js";
-import { router as feedRouter } from "./src/routes/feedRoutes.js";
 import { router as exploreRouter } from "./src/routes/exploreRoutes.js";
+import { router as feedRouter } from "./src/routes/feedRoutes.js";
+import { router as followRouter } from "./src/routes/followRoutes.js";
+import { router as tweetRouter } from "./src/routes/tweetRoutes.js";
+import { router as profileRouter } from "./src/routes/userRoutes.js";
 
 import errorHandler from "./src/middleware/errorHandler.js";
 import { sendError, sendSuccess } from "./src/utils/apiResponse.js";
 
 const app = express();
 const DEFAULT_ALLOWED_ORIGINS = [
-  "https://xcomclone-five.vercel.app",
+  "https://xclone-five.vercel.app",
   "http://localhost:5173",
   "http://127.0.0.1:5173",
 ];

@@ -1,7 +1,7 @@
 export function createAppError({
   statusCode = 500,
   code = "INTERNAL_SERVER_ERROR",
-  message = "Something went wrong on the server.",
+  message = "Something went wrong. Please try again.",
   details,
 } = {}) {
   const error = new Error(message);
@@ -16,15 +16,24 @@ export function createAppError({
 }
 
 export function formatValidationIssues(issues) {
-  return issues.map((issue) => ({
-    field: issue.path.join("."),
-    message: issue.message,
-  }));
+  return issues.reduce((acc, issue) => {
+    const field = issue.path.join(".");
+    const existingError = acc.find((e) => e.field === field);
+
+    if (!existingError) {
+      acc.push({
+        field,
+        message: issue.message,
+      });
+    }
+
+    return acc;
+  }, []);
 }
 
 export function createValidationError(
   issues,
-  message = "Request validation failed.",
+  message = "Please check your input and try again.",
 ) {
   return createAppError({
     statusCode: 400,

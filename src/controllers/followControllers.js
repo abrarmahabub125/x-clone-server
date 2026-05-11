@@ -1,20 +1,17 @@
 import { ObjectId } from "mongodb";
 import { getDB } from "../config/db.js";
+import { createAppError } from "../utils/apiError.js";
 import { sendSuccess } from "../utils/apiResponse.js";
 
 const PROFILES_COLLECTION = "profiles";
 const FOLLOW_COLLECTION = "relations";
 
 /**
- * find user who are not Followed
- *  skip logged in user
+ * Get users to follow - exclude logged in user and already followed users
  */
-
 export async function getWhoToFollow(req, res, next) {
   const loggedInUserId = new ObjectId(req.user.id);
-  const { limit } = req.query;
-
-  console.log(limit);
+  const limit = Math.min(Number(req.query.limit) || 10, 50); // Cap at 50 to prevent abuse
 
   try {
     const db = getDB();
@@ -47,7 +44,7 @@ export async function getWhoToFollow(req, res, next) {
             followData: { $size: 0 },
           },
         },
-        { $limit: Number(limit) },
+        { $limit: limit },
         {
           $project: {
             followData: 0,
@@ -61,24 +58,29 @@ export async function getWhoToFollow(req, res, next) {
       ])
       .toArray();
 
-    res.status(200).json({
-      success: true,
-      message: "Suggestion found",
+    return sendSuccess(res, {
+      message: "Suggested users retrieved successfully.",
       data: peopleWhoToFollow,
+      meta: {
+        count: peopleWhoToFollow.length,
+      },
     });
-  } catch (err) {
-    next(err);
+  } catch (error) {
+    next(error);
   }
 }
 
+/**
+ * Get top creators - exclude logged in user and already followed users
+ */
 export async function getCreators(req, res, next) {
   const loggedInUserId = new ObjectId(req.user.id);
-  const { limit } = req.query;
+  const limit = Math.min(Number(req.query.limit) || 10, 50); // Cap at 50 to prevent abuse
 
   try {
     const db = getDB();
 
-    const peopleWhoToFollow = await db
+    const creators = await db
       .collection(PROFILES_COLLECTION)
       .aggregate([
         { $match: { userId: { $ne: loggedInUserId } } },
@@ -106,6 +108,7 @@ export async function getCreators(req, res, next) {
             followData: { $size: 0 },
           },
         },
+        { $limit: limit },
         {
           $project: {
             followData: 0,
@@ -119,110 +122,192 @@ export async function getCreators(req, res, next) {
       ])
       .toArray();
 
-    res.status(200).json({
-      success: true,
-      message: "Suggestion found",
-      data: peopleWhoToFollow,
+    return sendSuccess(res, {
+      message: "Top creators retrieved successfully.",
+      data: creators,
+      meta: {
+        count: creators.length,
+      },
     });
-  } catch (err) {
-    next(err);
+  } catch (error) {
+    next(error);
   }
 }
 
-// ------------------------- Follow controllers ---------------------------
+// --------- Follow Status & Actions ---------
 
-// Check is following
+/**
+ * Get follow status between two users
+ */
 export async function getFollowStatus(req, res, next) {
-  const db = getDB();
-  const followerId = new ObjectId(req.user.id);
-  const followingId = new ObjectId(req.params.followingId);
+  try {
+    const { followingId } = req.params;
+    const followerId = new ObjectId(req.user.id);
 
-  const exists = await db.collection(FOLLOW_COLLECTION).findOne({
-    followerId,
-    followingId,
-  });
+    // Validate ObjectId
+    if (!ObjectId.isValid(followingId)) {
+      throw createAppError({
+        statusCode: 400,
+        code: "INVALID_USER_ID",
+        message: "Invalid user ID format.",
+      });
+    }
 
-  res.json({ isFollowing: !!exists });
+    const followingIdObj = new ObjectId(followingId);
+    const db = getDB();
+
+    const exists = await db.collection(FOLLOW_COLLECTION).findOne({
+      followerId,
+      followingId: followingIdObj,
+    });
+
+    return sendSuccess(res, {
+      message: "Follow status retrieved successfully.",
+      data: {
+        isFollowing: !!exists,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
 }
 
-// Follow user
+/**
+ * Follow a user
+ */
 export async function followUser(req, res, next) {
-  const db = getDB();
-  const followerId = new ObjectId(req.user.id); //  following update +1
-  const followingId = new ObjectId(req.params.followingId); // follower update +1
-
-  // check is user trying to follow yourself
-  if (followerId.equals(followingId)) {
-    return res.status(400).json({ message: "You cannot follow yourself." });
-  }
-
   try {
+    const { followingId } = req.params;
+    const followerId = new ObjectId(req.user.id);
+
+    // Validate ObjectId
+    if (!ObjectId.isValid(followingId)) {
+      throw createAppError({
+        statusCode: 400,
+        code: "INVALID_USER_ID",
+        message: "Invalid user ID format.",
+      });
+    }
+
+    const followingIdObj = new ObjectId(followingId);
+
+    // Prevent self-follow
+    if (followerId.equals(followingIdObj)) {
+      throw createAppError({
+        statusCode: 400,
+        code: "CANNOT_FOLLOW_SELF",
+        message: "You cannot follow yourself.",
+      });
+    }
+
+    const db = getDB();
+
+    // Check if already following
     const existing = await db.collection(FOLLOW_COLLECTION).findOne({
       followerId,
-      followingId,
+      followingId: followingIdObj,
     });
 
     if (existing) {
-      return res.status(409).json({ message: "Already following." });
+      throw createAppError({
+        statusCode: 409,
+        code: "ALREADY_FOLLOWING",
+        message: "You're already following this user.",
+      });
     }
 
+    // Create follow relationship
     await db.collection(FOLLOW_COLLECTION).insertOne({
       followerId,
-      followingId,
+      followingId: followingIdObj,
       createdAt: new Date(),
     });
 
+    // Update follower's following list
     await db.collection(PROFILES_COLLECTION).updateOne(
       { userId: followerId },
       {
-        $addToSet: { following: followingId },
+        $addToSet: { following: followingIdObj },
       },
     );
 
+    // Update followee's followers list
     await db.collection(PROFILES_COLLECTION).updateOne(
-      { userId: followingId },
+      { userId: followingIdObj },
       {
         $addToSet: { followers: followerId },
       },
     );
 
-    return res.status(201).json({ message: "Followed successfully." });
-  } catch (err) {
-    return res.status(500).json({ message: "Something went wrong." });
+    return sendSuccess(res, {
+      statusCode: 201,
+      message: "User followed successfully.",
+      data: {
+        followingId: followingIdObj.toString(),
+      },
+    });
+  } catch (error) {
+    next(error);
   }
 }
-// Unfollow user
-export async function unfollowUser(req, res, next) {
-  const db = getDB();
-  const followerId = new ObjectId(req.user.id);
-  const followingId = new ObjectId(req.params.followingId);
 
+/**
+ * Unfollow a user
+ */
+export async function unfollowUser(req, res, next) {
   try {
+    const { followingId } = req.params;
+    const followerId = new ObjectId(req.user.id);
+
+    // Validate ObjectId
+    if (!ObjectId.isValid(followingId)) {
+      throw createAppError({
+        statusCode: 400,
+        code: "INVALID_USER_ID",
+        message: "Invalid user ID format.",
+      });
+    }
+
+    const followingIdObj = new ObjectId(followingId);
+    const db = getDB();
+
+    // Delete follow relationship
     const result = await db.collection(FOLLOW_COLLECTION).deleteOne({
       followerId,
-      followingId,
+      followingId: followingIdObj,
     });
 
     if (result.deletedCount === 0) {
-      return res.status(404).json({ message: "Not following this user." });
+      throw createAppError({
+        statusCode: 404,
+        code: "NOT_FOLLOWING",
+        message: "You're not following this user.",
+      });
     }
 
+    // Update follower's following list
     await db.collection(PROFILES_COLLECTION).updateOne(
       { userId: followerId },
       {
-        $pull: { following: followingId },
+        $pull: { following: followingIdObj },
       },
     );
 
+    // Update followee's followers list
     await db.collection(PROFILES_COLLECTION).updateOne(
-      { userId: followingId },
+      { userId: followingIdObj },
       {
         $pull: { followers: followerId },
       },
     );
 
-    return res.status(200).json({ message: "Unfollowed successfully." });
-  } catch (err) {
-    return res.status(500).json({ message: "Something went wrong." });
+    return sendSuccess(res, {
+      message: "User unfollowed successfully.",
+      data: {
+        followingId: followingIdObj.toString(),
+      },
+    });
+  } catch (error) {
+    next(error);
   }
 }

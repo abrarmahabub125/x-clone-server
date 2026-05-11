@@ -5,35 +5,41 @@ const updateProfileSchema = z.object({
     .string()
     .trim()
     .min(1, "Full name is required")
-    .max(50, "Full name is too long"),
+    .max(50, "Full name cannot exceed 50 characters"),
   username: z
     .string()
     .trim()
     .min(3, "Username must be at least 3 characters")
-    .max(50, "Username must be at most 50 characters")
+    .max(30, "Username cannot exceed 30 characters")
     .toLowerCase()
     .regex(
       /^[a-z0-9_]+$/,
-      "Only lowercase letters, numbers, and underscores allowed",
+      "Username can only contain lowercase letters, numbers, and underscores",
     )
     .refine((val) => !val.startsWith("_") && !val.endsWith("_"), {
-      message: "Username cannot start or end with underscore",
+      message: "Username cannot start or end with an underscore",
     }),
   bio: z
     .string()
     .trim()
-    .max(160, "Bio must be 160 characters or fewer")
+    .max(160, "Bio cannot exceed 160 characters")
     .default(""),
-  location: z.string().trim().max(100, "Address is too long").default(""),
+  location: z
+    .string()
+    .trim()
+    .max(100, "Location cannot exceed 100 characters")
+    .default(""),
   profilePic: z
     .string()
     .trim()
-    .max(2048, "Profile photo URL is too long")
+    .url("Profile picture must be a valid URL")
+    .or(z.literal(""))
     .default(""),
   coverPhoto: z
     .string()
     .trim()
-    .max(2048, "Cover photo URL is too long")
+    .url("Cover photo must be a valid URL")
+    .or(z.literal(""))
     .default(""),
 });
 

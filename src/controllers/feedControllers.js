@@ -1,10 +1,17 @@
 import { ObjectId } from "mongodb";
 import { getDB } from "../config/db.js";
+import { sendSuccess } from "../utils/apiResponse.js";
 import {
   buildTweetCardProjection,
   buildViewerEngagementLookupStages,
 } from "../utils/tweetAggregation.js";
 
+/**
+ * Normalize and validate pagination limit
+ * @param {*} limit - Limit from query
+ * @param {number} fallback - Default limit
+ * @returns {number} - Normalized limit (1-50)
+ */
 function normalizeFeedLimit(limit, fallback = 10) {
   const parsedLimit = Number(limit);
 
@@ -15,24 +22,26 @@ function normalizeFeedLimit(limit, fallback = 10) {
   return Math.min(parsedLimit, 50);
 }
 
+/**
+ * Get "For You" feed - posts from users you don't follow
+ */
 export async function forYouFeed(req, res, next) {
-  const db = getDB();
-  const loggedInUserId = new ObjectId(req.user.id);
-
-  const { cursor, limit = 10 } = req.query;
-  const parsedLimit = normalizeFeedLimit(limit);
-
-  const matchStage = {
-    userId: { $ne: loggedInUserId },
-  };
-
-  if (cursor && ObjectId.isValid(cursor)) {
-    matchStage._id = {
-      $lt: new ObjectId(cursor),
-    };
-  }
-
   try {
+    const db = getDB();
+    const loggedInUserId = new ObjectId(req.user.id);
+    const { cursor, limit = 10 } = req.query;
+    const parsedLimit = normalizeFeedLimit(limit);
+
+    const matchStage = {
+      userId: { $ne: loggedInUserId },
+    };
+
+    if (cursor && ObjectId.isValid(cursor)) {
+      matchStage._id = {
+        $lt: new ObjectId(cursor),
+      };
+    }
+
     const feedPosts = await db
       .collection("tweets")
       .aggregate([
@@ -68,28 +77,32 @@ export async function forYouFeed(req, res, next) {
       visiblePosts.length > 0
         ? visiblePosts[visiblePosts.length - 1]._id
         : null;
-
     const hasMore = feedPosts.length > parsedLimit;
 
-    res.status(200).json({
-      message: "Feed posts retrieved successfully.",
-      nextCursor,
-      hasMore,
+    return sendSuccess(res, {
+      message: "For You feed retrieved successfully.",
       data: visiblePosts,
+      meta: {
+        count: visiblePosts.length,
+        nextCursor,
+        hasMore,
+      },
     });
-  } catch (err) {
-    next(err);
+  } catch (error) {
+    next(error);
   }
 }
 
+/**
+ * Get following feed - posts from users you follow
+ */
 export async function followingFeed(req, res, next) {
-  const db = getDB();
-  const loggedInUserId = new ObjectId(req.user.id);
-
-  const { cursor, limit = 10 } = req.query;
-  const parsedLimit = normalizeFeedLimit(limit);
-
   try {
+    const db = getDB();
+    const loggedInUserId = new ObjectId(req.user.id);
+    const { cursor, limit = 10 } = req.query;
+    const parsedLimit = normalizeFeedLimit(limit);
+
     const followingPosts = await db
       .collection("relations")
       .aggregate([
@@ -169,16 +182,18 @@ export async function followingFeed(req, res, next) {
       visiblePosts.length > 0
         ? visiblePosts[visiblePosts.length - 1]._id
         : null;
-
     const hasMore = followingPosts.length > parsedLimit;
 
-    res.status(200).json({
-      message: "Following posts retrieved successfully.",
-      nextCursor,
-      hasMore,
+    return sendSuccess(res, {
+      message: "Following feed retrieved successfully.",
       data: visiblePosts,
+      meta: {
+        count: visiblePosts.length,
+        nextCursor,
+        hasMore,
+      },
     });
-  } catch (err) {
-    next(err);
+  } catch (error) {
+    next(error);
   }
 }

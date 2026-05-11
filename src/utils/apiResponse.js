@@ -6,7 +6,12 @@ function appendOptionalProperty(target, key, value) {
 
 export function sendSuccess(
   res,
-  { statusCode = 200, message = "Request completed successfully.", data, meta } = {},
+  {
+    statusCode = 200,
+    message = "Request completed successfully.",
+    data,
+    meta,
+  } = {},
 ) {
   const payload = {
     success: true,
@@ -24,7 +29,7 @@ export function sendError(
   {
     statusCode = 500,
     code = "INTERNAL_SERVER_ERROR",
-    message = "Something went wrong on the server.",
+    message = "Something went wrong. Please try again.",
     details,
   } = {},
 ) {
@@ -36,7 +41,9 @@ export function sendError(
     },
   };
 
-  appendOptionalProperty(payload.error, "details", details);
+  if (Array.isArray(details) && details.length > 0) {
+    payload.error.details = details;
+  }
 
   return res.status(statusCode).json(payload);
 }

@@ -1,19 +1,34 @@
 import { ObjectId } from "mongodb";
 
 import { getDB } from "../config/db.js";
-import { sendSuccess, sendError } from "../utils/apiResponse.js";
+import { createAppError } from "../utils/apiError.js";
+import { sendSuccess } from "../utils/apiResponse.js";
 import {
   buildTweetCardProjection,
   buildViewerEngagementLookupStages,
 } from "../utils/tweetAggregation.js";
 
+/**
+ * Search for users and tweets
+ */
 export async function findResults(req, res, next) {
-  const db = getDB();
   try {
     const { q } = req.query;
 
-    const words = q.split(" ");
+    // Validate query parameter
+    if (!q || typeof q !== "string" || q.trim().length === 0) {
+      throw createAppError({
+        statusCode: 400,
+        code: "SEARCH_QUERY_REQUIRED",
+        message: "Search query is required.",
+      });
+    }
 
+    const searchQuery = q.trim();
+    const db = getDB();
+    const words = searchQuery.split(" ").filter(Boolean);
+
+    // Search users by full name
     const userResult = await db
       .collection("profiles")
       .find({
@@ -25,6 +40,7 @@ export async function findResults(req, res, next) {
       .limit(15)
       .toArray();
 
+    // Search tweets by content
     const tweetResult = await db
       .collection("tweets")
       .aggregate([
@@ -40,7 +56,7 @@ export async function findResults(req, res, next) {
         },
         {
           $lookup: {
-            from: "profiles", // collection name
+            from: "profiles",
             localField: "userId",
             foreignField: "userId",
             as: "user",
@@ -63,18 +79,18 @@ export async function findResults(req, res, next) {
       .toArray();
 
     return sendSuccess(res, {
-      message: "Explore search results fetched successfully.",
+      message: "Search results retrieved successfully.",
       data: {
         users: userResult,
         tweets: tweetResult,
       },
+      meta: {
+        query: searchQuery,
+        userCount: userResult.length,
+        tweetCount: tweetResult.length,
+      },
     });
-  } catch (err) {
-    return sendError(res, {
-      statusCode: 500,
-      code: "EXPLORE_SEARCH_FAILED",
-      message: "Unable to fetch explore search results.",
-      details: err.message,
-    });
+  } catch (error) {
+    next(error);
   }
 }

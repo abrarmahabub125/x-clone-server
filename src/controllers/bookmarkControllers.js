@@ -1,7 +1,8 @@
 import { ObjectId } from "mongodb";
 
-import { sendError, sendSuccess } from "../utils/apiResponse.js";
 import { getDB } from "../config/db.js";
+import { createAppError } from "../utils/apiError.js";
+import { sendSuccess } from "../utils/apiResponse.js";
 import {
   buildTweetCardProjection,
   buildViewerEngagementLookupStages,
@@ -9,18 +10,20 @@ import {
 
 const BOOKMARKS_COLLECTION = "bookmarks";
 
-// Get all bookmarks following user id
+/**
+ * Get all bookmarks for the authenticated user
+ */
 export async function getBookmarks(req, res, next) {
-  const userId = req.user.id;
-  const db = getDB();
-
   try {
+    const userId = new ObjectId(req.user.id);
+    const db = getDB();
+
     const bookmarks = await db
       .collection(BOOKMARKS_COLLECTION)
       .aggregate([
         {
           $match: {
-            userId: new ObjectId(userId),
+            userId,
           },
         },
         {
@@ -50,7 +53,7 @@ export async function getBookmarks(req, res, next) {
         {
           $unwind: "$user",
         },
-        ...buildViewerEngagementLookupStages(new ObjectId(userId), "$tweet._id"),
+        ...buildViewerEngagementLookupStages(userId, "$tweet._id"),
         {
           $project: buildTweetCardProjection({
             _id: "$tweet._id",
@@ -72,81 +75,118 @@ export async function getBookmarks(req, res, next) {
       .toArray();
 
     return sendSuccess(res, {
-      statusCode: 200,
-      status: "success",
+      message: "Bookmarks retrieved successfully.",
       data: bookmarks,
+      meta: {
+        count: bookmarks.length,
+      },
     });
-  } catch (err) {
-    next(err);
+  } catch (error) {
+    next(error);
   }
 }
 
+/**
+ * Add a bookmark
+ */
 export async function addBookmarks(req, res, next) {
-  const userId = req.user.id;
-  const { tweetId } = req.body;
-  const db = getDB();
-
-  if (!ObjectId.isValid(tweetId)) {
-    return res.status(400).json({
-      message: "Invalid tweet id",
-    });
-  }
-
-  const existing = await db
-    .collection(BOOKMARKS_COLLECTION)
-    .findOne({ userId: new ObjectId(userId), tweetId: new ObjectId(tweetId) });
-
-  if (existing) {
-    return sendError(res, {
-      statusCode: 409,
-      status: "Error",
-      message: "Tweet already bookmarked!",
-    });
-  }
   try {
-    await db.collection(BOOKMARKS_COLLECTION).insertOne({
-      userId: new ObjectId(userId),
-      tweetId: new ObjectId(tweetId),
-      createdAt: new Date(),
-    });
+    const userId = new ObjectId(req.user.id);
+    const { tweetId } = req.body;
 
-    return res.status(201).json({
-      statusCode: 201,
-      status: "Success",
-      message: "Bookmarked successfully",
-    });
-  } catch (err) {
-    next(err);
-  }
-}
-
-export async function deleteBookmarks(req, res, next) {
-  const userId = req.user.id;
-  const { tweetId } = req.params;
-  const db = getDB();
-
-  if (!ObjectId.isValid(tweetId)) {
-    return res.status(400).json({
-      message: "Invalid tweet id",
-    });
-  }
-
-  try {
-    const result = await db.collection(BOOKMARKS_COLLECTION).deleteOne({
-      userId: new ObjectId(userId),
-      tweetId: new ObjectId(tweetId),
-    });
-
-    if (result.deletedCount === 0) {
-      return res.status(404).json({
-        message: "Bookmark not found",
+    // Validate input
+    if (!tweetId) {
+      throw createAppError({
+        statusCode: 400,
+        code: "TWEET_ID_REQUIRED",
+        message: "Tweet ID is required to bookmark.",
       });
     }
 
-    return res.status(200).json({
-      message: "Removed from bookmarks",
+    if (!ObjectId.isValid(tweetId)) {
+      throw createAppError({
+        statusCode: 400,
+        code: "INVALID_TWEET_ID",
+        message: "Invalid tweet ID format.",
+      });
+    }
+
+    const tweetIdObj = new ObjectId(tweetId);
+    const db = getDB();
+
+    // Check if already bookmarked
+    const existing = await db
+      .collection(BOOKMARKS_COLLECTION)
+      .findOne({ userId, tweetId: tweetIdObj });
+
+    if (existing) {
+      throw createAppError({
+        statusCode: 409,
+        code: "ALREADY_BOOKMARKED",
+        message: "You've already bookmarked this post.",
+      });
+    }
+
+    // Add bookmark
+    await db.collection(BOOKMARKS_COLLECTION).insertOne({
+      userId,
+      tweetId: tweetIdObj,
+      createdAt: new Date(),
     });
-  } catch (err) {
-    next(err);
+
+    return sendSuccess(res, {
+      statusCode: 201,
+      message: "Post bookmarked successfully.",
+      data: {
+        tweetId: tweetIdObj.toString(),
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * Delete a bookmark
+ */
+export async function deleteBookmarks(req, res, next) {
+  try {
+    const userId = new ObjectId(req.user.id);
+    const { tweetId } = req.params;
+
+    // Validate input
+    if (!ObjectId.isValid(tweetId)) {
+      throw createAppError({
+        statusCode: 400,
+        code: "INVALID_TWEET_ID",
+        message: "Invalid tweet ID format.",
+      });
+    }
+
+    const tweetIdObj = new ObjectId(tweetId);
+    const db = getDB();
+
+    // Delete bookmark
+    const result = await db.collection(BOOKMARKS_COLLECTION).deleteOne({
+      userId,
+      tweetId: tweetIdObj,
+    });
+
+    if (result.deletedCount === 0) {
+      throw createAppError({
+        statusCode: 404,
+        code: "NOT_BOOKMARKED",
+        message: "You haven't bookmarked this post.",
+      });
+    }
+
+    return sendSuccess(res, {
+      message: "Post removed from bookmarks successfully.",
+      data: {
+        tweetId: tweetIdObj.toString(),
+      },
+    });
+  } catch (error) {
+    next(error);
   }
 }

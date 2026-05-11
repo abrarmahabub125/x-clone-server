@@ -72,42 +72,46 @@ function getErrorCode(error, statusCode) {
 
 function getMessage(error, statusCode) {
   if (error?.type === "entity.parse.failed") {
-    return "Request body contains invalid JSON.";
+    return "The request body contains invalid JSON. Please check your input.";
   }
 
   if (error?.code === 11000) {
-    return "A resource with the same value already exists.";
+    const field = Object.keys(error?.keyValue || {})[0];
+    if (field) {
+      return `A user with this ${field} already exists. Please try another.`;
+    }
+    return "This record already exists. Please try different values.";
   }
 
   if (typeof error?.message === "string" && error.message.trim()) {
     if (statusCode >= 500 && !Number.isInteger(error?.statusCode)) {
-      return "Something went wrong on the server.";
+      return "Something went wrong. Please try again later.";
     }
 
     return error.message;
   }
 
   if (statusCode === 400) {
-    return "The request could not be processed.";
+    return "Please check your input and try again.";
   }
 
   if (statusCode === 401) {
-    return "Authentication is required to access this resource.";
+    return "Please log in to continue.";
   }
 
   if (statusCode === 403) {
-    return "You do not have permission to access this resource.";
+    return "You don't have permission to access this resource.";
   }
 
   if (statusCode === 404) {
-    return "The requested resource was not found.";
+    return "The resource you're looking for doesn't exist.";
   }
 
   if (statusCode === 409) {
-    return "The request conflicts with the current state of the resource.";
+    return "This action conflicts with the current state. Please refresh and try again.";
   }
 
-  return "Something went wrong on the server.";
+  return "Something went wrong. Please try again later.";
 }
 
 function getDetails(error) {

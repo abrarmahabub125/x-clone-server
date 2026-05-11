@@ -2,14 +2,22 @@ import z from "zod";
 
 const passwordSchema = z
   .string()
-  .min(8, "Password must be at least 8 characters")
-  .max(20, "Password is too long")
-  .regex(/[a-z]/, "Must contain at least one lowercase letter")
-  .regex(/[0-9]/, "Must contain at least one number")
-  .regex(/[^A-Za-z0-9]/, "Must contain at least one special character");
+  .min(8, "Password must be at least 8 characters long")
+  .max(20, "Password cannot exceed 20 characters")
+  .regex(/[a-z]/, "Password must contain at least one lowercase letter")
+  .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
+  .regex(/[0-9]/, "Password must contain at least one number")
+  .regex(
+    /[^A-Za-z0-9]/,
+    "Password must contain at least one special character (e.g., !@#$%)",
+  );
 
 export const updateEmailSchema = z.object({
-  newEmail: z.email({ message: "Invalid email address" }).trim(),
+  newEmail: z
+    .string()
+    .trim()
+    .email("Please enter a valid email address")
+    .toLowerCase(),
   currentPassword: passwordSchema,
 });
 
@@ -21,7 +29,7 @@ export const updatePasswordSchema = z
   })
   .refine((value) => value.newPassword === value.confirmNewPassword, {
     path: ["confirmNewPassword"],
-    message: "New password confirmation does not match.",
+    message: "Password confirmation does not match. Please try again.",
   });
 
 export const deleteAccountSchema = z.object({
@@ -30,6 +38,6 @@ export const deleteAccountSchema = z.object({
     .string()
     .trim()
     .refine((value) => value === "DELETE", {
-      message: 'Please type "DELETE" to confirm account deletion.',
+      message: 'Type "DELETE" to confirm account deletion.',
     }),
 });
