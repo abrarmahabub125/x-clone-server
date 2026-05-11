@@ -3,6 +3,7 @@ import { ObjectId } from "mongodb";
 import { client, getDB } from "../config/db.js";
 import { createAppError, createValidationError } from "../utils/apiError.js";
 import { sendError, sendSuccess } from "../utils/apiResponse.js";
+import { uploadTweetImageToCloudinary } from "../utils/uploadToCloudinary.js";
 import {
   BOOKMARKS_COLLECTION,
   LIKES_COLLECTION,
@@ -158,14 +159,17 @@ export async function createTweet(req, res, next) {
     }
 
     const {
-      userId,
       content,
       media,
+      mediaDataUrl,
+      location,
       likesCount,
       commentsCount,
       viewsCount,
       retweetsCount,
     } = result.data;
+
+    const userId = req.user?.id;
 
     if (!ObjectId.isValid(userId)) {
       return sendError(res, {
@@ -176,10 +180,14 @@ export async function createTweet(req, res, next) {
     }
 
     const db = getDB();
+    const uploadedMediaUrl = mediaDataUrl
+      ? await uploadTweetImageToCloudinary(mediaDataUrl)
+      : media;
     const tweetDocument = {
       userId: new ObjectId(userId),
-      content,
-      media,
+      content: content.trim(),
+      media: uploadedMediaUrl,
+      location: location.trim(),
       likesCount,
       commentsCount,
       viewsCount,

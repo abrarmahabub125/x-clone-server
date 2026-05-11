@@ -91,6 +91,7 @@ export function buildTweetCardProjection(overrides = {}) {
     userId: 1,
     content: 1,
     media: 1,
+    location: 1,
     likesCount: 1,
     commentsCount: 1,
     viewsCount: 1,

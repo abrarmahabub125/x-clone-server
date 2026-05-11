@@ -72,6 +72,7 @@ function buildUserLikesPipeline(userId, viewerId) {
         userId: "$tweet.userId",
         content: "$tweet.content",
         media: "$tweet.media",
+        location: "$tweet.location",
         likesCount: "$tweet.likesCount",
         commentsCount: "$tweet.commentsCount",
         viewsCount: "$tweet.viewsCount",
