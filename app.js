@@ -17,7 +17,7 @@ import { sendError, sendSuccess } from "./src/utils/apiResponse.js";
 
 const app = express();
 const DEFAULT_ALLOWED_ORIGINS = [
-  "https://x-social-clone.vercel.app/",
+  "https://x-social-clone.vercel.app",
   "http://localhost:5173",
   "http://127.0.0.1:5173",
 ];
