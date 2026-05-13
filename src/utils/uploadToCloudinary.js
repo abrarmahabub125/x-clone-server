@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import { createAppError } from "./apiError.js";
 
 const CLOUDINARY_UPLOAD_FOLDER = "x-clone/tweets";
+const CLOUDINARY_PROFILE_FOLDER = "x-clone/profiles";
 
 function assertCloudinaryConfig() {
   const { CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET } =
@@ -44,9 +45,14 @@ function buildCloudinarySignature({ folder, timestamp }, apiSecret) {
   return crypto.createHash("sha1").update(signaturePayload).digest("hex");
 }
 
-export async function uploadTweetImageToCloudinary(dataUrl) {
+async function uploadImageToCloudinary(dataUrl, folder) {
   if (!dataUrl) {
     return "";
+  }
+
+  // Check if it's already a URL (from previous upload)
+  if (/^https?:\/\//.test(dataUrl)) {
+    return dataUrl;
   }
 
   if (!/^data:image\/[a-zA-Z0-9.+-]+;base64,/.test(dataUrl)) {
@@ -62,7 +68,7 @@ export async function uploadTweetImageToCloudinary(dataUrl) {
   const timestamp = Math.floor(Date.now() / 1000);
   const signature = buildCloudinarySignature(
     {
-      folder: CLOUDINARY_UPLOAD_FOLDER,
+      folder,
       timestamp,
     },
     apiSecret,
@@ -72,7 +78,7 @@ export async function uploadTweetImageToCloudinary(dataUrl) {
   formData.set("file", dataUrl);
   formData.set("api_key", apiKey);
   formData.set("timestamp", String(timestamp));
-  formData.set("folder", CLOUDINARY_UPLOAD_FOLDER);
+  formData.set("folder", folder);
   formData.set("signature", signature);
 
   const response = await fetch(
@@ -95,4 +101,12 @@ export async function uploadTweetImageToCloudinary(dataUrl) {
   }
 
   return payload.secure_url;
+}
+
+export async function uploadTweetImageToCloudinary(dataUrl) {
+  return uploadImageToCloudinary(dataUrl, CLOUDINARY_UPLOAD_FOLDER);
+}
+
+export async function uploadProfileImageToCloudinary(dataUrl) {
+  return uploadImageToCloudinary(dataUrl, CLOUDINARY_PROFILE_FOLDER);
 }

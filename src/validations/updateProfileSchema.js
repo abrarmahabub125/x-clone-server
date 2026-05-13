@@ -32,13 +32,25 @@ const updateProfileSchema = z.object({
   profilePic: z
     .string()
     .trim()
-    .url("Profile picture must be a valid URL")
+    .refine(
+      (val) =>
+        !val ||
+        /^data:image\/[a-zA-Z0-9.+-]+;base64,/.test(val) ||
+        /^https?:\/\//.test(val),
+      "Profile picture must be a valid base64 image or URL",
+    )
     .or(z.literal(""))
     .default(""),
   coverPhoto: z
     .string()
     .trim()
-    .url("Cover photo must be a valid URL")
+    .refine(
+      (val) =>
+        !val ||
+        /^data:image\/[a-zA-Z0-9.+-]+;base64,/.test(val) ||
+        /^https?:\/\//.test(val),
+      "Cover photo must be a valid base64 image or URL",
+    )
     .or(z.literal(""))
     .default(""),
 });

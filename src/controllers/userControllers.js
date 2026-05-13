@@ -1,11 +1,13 @@
 import { ObjectId } from "mongodb";
-import { getDB, client } from "../config/db.js";
+import { client, getDB } from "../config/db.js";
+import { createValidationError } from "../utils/apiError.js";
 import { sendError, sendSuccess } from "../utils/apiResponse.js";
 import {
   buildTweetCardProjection,
   buildViewerEngagementLookupStages,
   LIKES_COLLECTION,
 } from "../utils/tweetAggregation.js";
+import { uploadProfileImageToCloudinary } from "../utils/uploadToCloudinary.js";
 import updateProfileSchema from "../validations/updateProfileSchema.js";
 
 const USERS_COLLECTION = "users";
@@ -156,10 +158,30 @@ export async function updateProfile(req, res, next) {
       throw createValidationError(parsed.error.issues, "Validation failed.");
     }
 
-    const { fullName, username, bio, location, profilePic, coverPhoto } =
+    let { fullName, username, bio, location, profilePic, coverPhoto } =
       parsed.data;
 
     const userId = toObjectId(user.id);
+
+    // Upload profile picture to Cloudinary if provided as base64
+    if (profilePic && /^data:image\//.test(profilePic)) {
+      try {
+        profilePic = await uploadProfileImageToCloudinary(profilePic);
+      } catch (error) {
+        next(error);
+        return;
+      }
+    }
+
+    // Upload cover photo to Cloudinary if provided as base64
+    if (coverPhoto && /^data:image\//.test(coverPhoto)) {
+      try {
+        coverPhoto = await uploadProfileImageToCloudinary(coverPhoto);
+      } catch (error) {
+        next(error);
+        return;
+      }
+    }
 
     const existing = await db.collection(PROFILES_COLLECTION).findOne({
       username,

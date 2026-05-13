@@ -23,7 +23,7 @@ function normalizeFeedLimit(limit, fallback = 10) {
 }
 
 /**
- * Get "For You" feed - posts from users you don't follow
+ * Get "For You" feed - mixed posts from all users (alternating followed and non-followed)
  */
 export async function forYouFeed(req, res, next) {
   try {
@@ -59,6 +59,35 @@ export async function forYouFeed(req, res, next) {
         {
           $unwind: "$user",
         },
+        {
+          $lookup: {
+            from: "relations",
+            let: { postUserId: "$userId" },
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $and: [
+                      { $eq: ["$followerId", loggedInUserId] },
+                      { $eq: ["$followingId", "$$postUserId"] },
+                    ],
+                  },
+                },
+              },
+              {
+                $limit: 1,
+              },
+            ],
+            as: "followingMatch",
+          },
+        },
+        {
+          $addFields: {
+            isUserFollowed: {
+              $gt: [{ $size: "$followingMatch" }, 0],
+            },
+          },
+        },
         ...buildViewerEngagementLookupStages(loggedInUserId),
         {
           $sort: { _id: -1 },
@@ -67,7 +96,7 @@ export async function forYouFeed(req, res, next) {
           $limit: parsedLimit + 1,
         },
         {
-          $project: buildTweetCardProjection(),
+          $project: buildTweetCardProjection({ isUserFollowed: 1 }),
         },
       ])
       .toArray();

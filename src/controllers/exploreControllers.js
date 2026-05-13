@@ -14,6 +14,7 @@ import {
 export async function findResults(req, res, next) {
   try {
     const { q } = req.query;
+    const loggedInUserId = new ObjectId(req.user.id);
 
     // Validate query parameter
     if (!q || typeof q !== "string" || q.trim().length === 0) {
@@ -28,31 +29,75 @@ export async function findResults(req, res, next) {
     const db = getDB();
     const words = searchQuery.split(" ").filter(Boolean);
 
-    // Search users by full name
+    // Search users by full name with follow status - exclude logged-in user
     const userResult = await db
       .collection("profiles")
-      .find({
-        $or: words.map((word) => ({
-          fullName: { $regex: word, $options: "i" },
-        })),
-      })
-      .sort({ fullName: 1 })
-      .limit(15)
+      .aggregate([
+        {
+          $match: {
+            userId: { $ne: loggedInUserId }, // Exclude logged-in user
+            $or: words.map((word) => ({
+              fullName: { $regex: word, $options: "i" },
+            })),
+          },
+        },
+        {
+          $lookup: {
+            from: "relations",
+            let: { userID: "$userId" },
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $and: [
+                      { $eq: ["$followerId", loggedInUserId] },
+                      { $eq: ["$followingId", "$$userID"] },
+                    ],
+                  },
+                },
+              },
+            ],
+            as: "followData",
+          },
+        },
+        {
+          $addFields: {
+            isFollowing: {
+              $cond: [{ $gt: [{ $size: "$followData" }, 0] }, true, false],
+            },
+          },
+        },
+        {
+          $sort: { fullName: 1 },
+        },
+        {
+          $limit: 15,
+        },
+        {
+          $project: {
+            followData: 0, // Remove temporary follow data
+            coverPhoto: 0,
+            location: 0,
+            totalPost: 0,
+          },
+        },
+      ])
       .toArray();
 
-    // Search tweets by content
+    // Search tweets by content - exclude tweets from logged-in user
     const tweetResult = await db
       .collection("tweets")
       .aggregate([
         {
-          $match: words.length
-            ? {
-                content: {
-                  $regex: words.join("|"),
-                  $options: "i",
-                },
-              }
-            : {},
+          $match: {
+            userId: { $ne: loggedInUserId }, // Exclude logged-in user's tweets
+            ...(words.length && {
+              content: {
+                $regex: words.join("|"),
+                $options: "i",
+              },
+            }),
+          },
         },
         {
           $lookup: {
@@ -65,7 +110,7 @@ export async function findResults(req, res, next) {
         {
           $unwind: "$user",
         },
-        ...buildViewerEngagementLookupStages(new ObjectId(req.user.id)),
+        ...buildViewerEngagementLookupStages(loggedInUserId),
         {
           $project: buildTweetCardProjection(),
         },
