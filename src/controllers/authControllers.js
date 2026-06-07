@@ -1,12 +1,12 @@
 import { ObjectId } from "mongodb";
 
-import { getDB, client } from "../config/db.js";
+import { client, getDB } from "../config/db.js";
+import { createAppError, createValidationError } from "../utils/apiError.js";
+import { sendError, sendSuccess } from "../utils/apiResponse.js";
 import {
   compareWithBcryptHash,
   generateBcryptHash,
 } from "../utils/bcryptHashAndCompare.js";
-import { createAppError, createValidationError } from "../utils/apiError.js";
-import { sendError, sendSuccess } from "../utils/apiResponse.js";
 import { generateOTP } from "../utils/generateOTP.js";
 import {
   generateAccessToken,
@@ -20,7 +20,6 @@ import {
 } from "../validations/accountSettingsSchema.js";
 import loginSchema from "../validations/loginSchema.js";
 import registerSchema from "../validations/registerSchema.js";
-import updateProfileSchema from "../validations/updateProfileSchema.js";
 
 const USERS_COLLECTION = "users";
 const PROFILES_COLLECTION = "profiles";
@@ -65,13 +64,13 @@ function getAccessCookieClearOptions(req) {
   return buildCookieOptions(req);
 }
 
-function createUserProfile(userId, fullName) {
+function createUserProfile(userId, fullName, profilePic = "") {
   return {
     userId,
     bio: "",
     fullName,
     username: "",
-    profilePic: "",
+    profilePic: profilePic,
     coverPhoto: "",
     location: "",
     totalPost: 0,
@@ -484,10 +483,8 @@ export async function updateEmail(req, res, next) {
 
     const { newEmail, currentPassword } = parsedResult.data;
     const db = getDB();
-    const { authenticatedUserId, userDocument } = await getAuthenticatedUserDocument(
-      db,
-      req,
-    );
+    const { authenticatedUserId, userDocument } =
+      await getAuthenticatedUserDocument(db, req);
 
     if (userDocument.email === newEmail) {
       throw createAppError({
@@ -564,10 +561,8 @@ export async function updatePassword(req, res, next) {
 
     const { currentPassword, newPassword } = parsedResult.data;
     const db = getDB();
-    const { authenticatedUserId, userDocument } = await getAuthenticatedUserDocument(
-      db,
-      req,
-    );
+    const { authenticatedUserId, userDocument } =
+      await getAuthenticatedUserDocument(db, req);
 
     const isPasswordMatch = await compareWithBcryptHash(
       currentPassword,
@@ -630,10 +625,8 @@ export async function deleteAccount(req, res, next) {
 
     const { currentPassword } = parsedResult.data;
     const db = getDB();
-    const { authenticatedUserId, userDocument } = await getAuthenticatedUserDocument(
-      db,
-      req,
-    );
+    const { authenticatedUserId, userDocument } =
+      await getAuthenticatedUserDocument(db, req);
 
     const isPasswordMatch = await compareWithBcryptHash(
       currentPassword,
@@ -762,5 +755,142 @@ export async function deleteAccount(req, res, next) {
     });
   } catch (error) {
     next(error);
+  }
+}
+
+// =================================== Google Authenticaiton ================================
+// Google OAuth Client initialize
+export async function googleAuth(req, res, next) {
+  try {
+    const { token } = req.body;
+
+    const db = getDB();
+    const usersCollection = db.collection(USERS_COLLECTION);
+    const profilesCollection = db.collection(PROFILES_COLLECTION);
+
+    if (!token) {
+      throw createAppError({
+        statusCode: 400,
+        code: "TOKEN_REQUIRED",
+        message: "Google access token is required.",
+      });
+    }
+
+    // Verify token with Google
+    const googleResponse = await fetch(
+      "https://www.googleapis.com/oauth2/v3/userinfo",
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+    );
+
+    if (!googleResponse.ok) {
+      throw createAppError({
+        statusCode: 401,
+        code: "INVALID_GOOGLE_TOKEN",
+        message: "Invalid Google token.",
+      });
+    }
+
+    const googleUser = await googleResponse.json();
+
+    const { sub: googleId, name, email, email_verified, picture } = googleUser;
+
+    if (!email) {
+      throw createAppError({
+        statusCode: 401,
+        code: "INVALID_GOOGLE_ACCOUNT",
+        message: "Google account email not found.",
+      });
+    }
+
+    if (!email_verified) {
+      throw createAppError({
+        statusCode: 401,
+        code: "EMAIL_NOT_VERIFIED",
+        message: "Google email is not verified.",
+      });
+    }
+
+    let user = await usersCollection.findOne({ email });
+
+    // =========================
+    // Register if user not found
+    // =========================
+    if (!user) {
+      const session = client.startSession();
+
+      try {
+        await session.withTransaction(async () => {
+          const userDocument = {
+            fullName: name,
+            email,
+            googleId,
+            authProvider: "google",
+            isVerified: true,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          };
+
+          const userResult = await usersCollection.insertOne(userDocument, {
+            session,
+          });
+
+          const insertedUserId = userResult.insertedId;
+
+          await profilesCollection.insertOne(
+            createUserProfile(insertedUserId, name, picture),
+            { session },
+          );
+
+          user = {
+            _id: insertedUserId,
+            ...userDocument,
+          };
+        });
+      } finally {
+        await session.endSession();
+      }
+    }
+
+    // Update googleId if missing
+    if (!user.googleId) {
+      await usersCollection.updateOne(
+        { _id: user._id },
+        {
+          $set: {
+            googleId,
+            updatedAt: new Date(),
+          },
+        },
+      );
+    }
+
+    // =========================
+    // Generate JWT
+    // =========================
+    const jwtToken = generateAccessToken({
+      id: user._id.toString(),
+      email: user.email,
+    });
+
+    // =========================
+    // Set Auth Cookie
+    // =========================
+    res.cookie("token", jwtToken, getAccessCookieOptions(req));
+
+    return sendSuccess(res, {
+      statusCode: 200,
+      message: "Authentication successful.",
+      data: {
+        userId: user._id.toString(),
+        email: user.email,
+        fullName: user.fullName,
+      },
+    });
+  } catch (err) {
+    next(err);
   }
 }

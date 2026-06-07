@@ -3,6 +3,7 @@ import express from "express";
 import {
   deleteAccount,
   getMe,
+  googleAuth,
   login,
   logout,
   register,
@@ -17,6 +18,7 @@ const router = express.Router();
 
 // Auth routes cover signup, OTP verification, and session state.
 router.post("/auth/register", register);
+router.post("/auth/google", googleAuth);
 router.post("/auth/login", login);
 router.post("/auth/verify-otp", verifyTempCookie, verifyOTP);
 router.get("/auth/get-me", verifyAccessToken, getMe);

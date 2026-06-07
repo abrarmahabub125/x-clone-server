@@ -85,11 +85,12 @@ app.get("/", (req, res) => {
 
 /**
  * --------------------- Auth ----------------------
- *  GET ---- /api/auth/register
- *  GET ---- /api/auth/login
- *  GET ---- /api/auth/verify-otp
+ *  POST ---- /api/auth/register
+ *  POST ---- /api/auth/google
+ *  POST ---- /api/auth/login
+ *  POST ---- /api/auth/verify-otp
+ *  POST ---- /api/auth/logout
  *  GET ---- /api/auth/get-me
- *  GET ---- /api/auth/logout
  *
  * --------------------Follow ----------------------
  *  GET ---- /api/users/who-to-follow
